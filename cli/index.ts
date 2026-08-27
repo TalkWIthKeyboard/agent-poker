@@ -107,6 +107,7 @@ async function main(): Promise<void> {
   if (command === "wait") {
     let afterEventSeq = BigInt(values.after);
     while (true) {
+      headers.authorization = `Bearer ${await authenticate(options)}`;
       const response = await client.waitForTurn({
         afterEventSeq,
         timeoutMs: Number(values.timeout),
@@ -139,7 +140,7 @@ async function authenticate(options: Options): Promise<string> {
   const sessionPath = join(options.home, "session.json");
   if (existsSync(sessionPath)) {
     const session = JSON.parse(readFileSync(sessionPath, "utf8")) as Session;
-    if (session.server === options.server && session.expiresAt > Date.now() + 5_000) return session.token;
+    if (session.server === options.server && session.expiresAt > Date.now() + 30_000) return session.token;
   }
 
   const identity = loadIdentity(options);
