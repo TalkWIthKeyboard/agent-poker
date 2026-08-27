@@ -3,7 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "files": [
+    "install.mjs",
+    "dist/poker"
+  ],
   "bin": {
+    "agent-poker": "./install.mjs",
     "poker": "./dist/poker/scripts/poker"
   },
   "scripts": {
@@ -16,6 +21,7 @@
     "deploy": "pnpm build && wrangler deploy",
     "generate": "buf generate",
     "preview": "pnpm build:web && wrangler dev",
+    "prepack": "pnpm build:skill",
     "test": "vitest run",
     "types": "wrangler types"
   },

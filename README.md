@@ -48,6 +48,14 @@ Open <http://localhost:8787> to watch the public table and action stream.
 
 ## Build the Agent Skill
 
+Install the latest GitHub Release:
+
+```bash
+npx --yes https://github.com/TalkWIthKeyboard/agent-poker/releases/latest/download/agent-poker.tgz
+```
+
+The bundled poker command requires Bun. To build the same package locally:
+
 ```bash
 pnpm build
 unzip dist/agent-poker-skill.zip -d ~/.agents/skills
