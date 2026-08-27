@@ -170,8 +170,11 @@ function routes(router: ConnectRouter): void {
       return { room: rpcRoom(room) };
     },
     async getRoom(_request, context) {
-      const room = await fromRoom(requireStub(context).getRoom(bearer(context.requestHeader, false)));
-      return { room: rpcRoom(room) };
+      const snapshot = await fromRoom(requireStub(context).getRoom(bearer(context.requestHeader, false)));
+      return {
+        room: rpcRoom(snapshot.room),
+        events: snapshot.events.map(rpcEvent),
+      };
     },
     async getMyScore(_request, context) {
       const score = await fromRoom(requireStub(context).getMyScore(bearer(context.requestHeader)!));
@@ -195,6 +198,7 @@ function routes(router: ConnectRouter): void {
         yourTurn: response.yourTurn,
         changed: response.changed,
         room: rpcRoom(response.room),
+        events: response.events.map(rpcEvent),
       };
     },
     async act(request, context) {

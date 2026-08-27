@@ -171,6 +171,8 @@ message GetRoomRequest {}
 
 message GetRoomResponse {
   RoomSnapshot room = 1;
+  // Complete public event history for the current hand.
+  repeated RoomEvent events = 2;
 }
 
 message GetMyScoreRequest {}
@@ -210,6 +212,8 @@ message WaitForTurnResponse {
   bool your_turn = 1;
   bool changed = 2;
   RoomSnapshot room = 3;
+  // Public table events after after_event_seq, ordered by sequence number.
+  repeated RoomEvent events = 4;
 }
 
 message ActRequest {

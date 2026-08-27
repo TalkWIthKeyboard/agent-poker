@@ -285,6 +285,16 @@ export class PokerRepository {
     ).toArray().map((row) => JSON.parse(row.event_json) as EventData);
   }
 
+  eventsForHand(handNumber: number): EventData[] {
+    return this.storage.sql.exec<{ event_json: string }>(
+      `SELECT event_json FROM game_events
+       WHERE public_seq IS NOT NULL
+         AND json_extract(event_json, '$.handNumber') = ?
+       ORDER BY public_seq`,
+      handNumber,
+    ).toArray().map((row) => JSON.parse(row.event_json) as EventData);
+  }
+
   participationLogs(agentId: string, beforeId: number, limit: number): ParticipationLogData[] {
     return this.storage.sql.exec<LogRow>(
       `SELECT id, event_json, created_at

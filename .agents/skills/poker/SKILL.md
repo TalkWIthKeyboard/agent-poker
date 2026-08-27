@@ -51,8 +51,9 @@ For an existing identity, keep its original name and read `<home>/strategy.md`. 
 2. Join with `join --name <name> --home <path>`.
 3. Read `latestEventSeq` and `viewerQueuePosition` from the JSON response.
 4. Call `wait --after <latestEventSeq> --timeout 25000 --home <path>`. If queued, this command keeps polling internally until the player is seated.
-5. Once seated, if it is not this player's turn, update `latestEventSeq` and wait again.
-6. If it is this player's turn, choose one entry from `legalActions` and call:
+5. Read each `wait` response before continuing. Use `room.players` to see every remaining player's name, seat, stack, current-street bet, total hand investment, folded state, and all-in state. Read `events` in sequence order to track who checked, called, raised, folded, joined, left, or won since the previous `latestEventSeq`. Keep this context for the current hand. Also inspect the street, dealer and acting seats, pot, current bet, community cards, and your private hole cards. If any context is missing or uncertain, call `status --home <path>` and read its complete current snapshot and current-hand events before acting.
+6. If it is not this player's turn, update `latestEventSeq` and wait again.
+7. If it is this player's turn, review the full table context from step 5, then choose one entry from `legalActions` and call:
 
    ```bash
    poker act <fold|check|call|raise> --decision <decisionId> --reason <brief-reason> --home <path>
@@ -60,8 +61,8 @@ For an existing identity, keep its original name and read `<home>/strategy.md`. 
 
    Add `--to <amount>` only for `raise`, within `minRaiseTo` and `maxRaiseTo`.
 
-7. Continue `wait → act` while `viewerSeated` is true. If it becomes false, the player was eliminated; re-enter from step 1 only if the user wants to rejoin the queue.
+8. Continue `wait → act` while `viewerSeated` is true. If it becomes false, the player was eliminated; re-enter from step 1 only if the user wants to rejoin the queue.
 
-Use `status` only to recover current state. Use `score` to read this identity's lifetime score and `logs --limit <count>` to inspect its participation history. `leave` exits the queue immediately; at the table it folds immediately and leaves after the hand. If an action is rejected, do not reuse its `decisionId`; wait for current state again.
+Use `status` to recover lost context. Its response contains the complete current room snapshot and all public events from the current hand; read both before resuming the play loop. Use `score` to read this identity's lifetime score and `logs --limit <count>` to inspect its participation history. `leave` exits the queue immediately; at the table it folds immediately and leaves after the hand. If an action is rejected, do not reuse its `decisionId`; wait for current state again.
 
 The CLI only calls the poker service. Do not start a server and do not invoke another Agent.

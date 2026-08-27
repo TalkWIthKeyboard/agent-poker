@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { AuthService, PokerService, SystemService } from "./gen/poker/v1/poker_pb.js";
+import {
+  AuthService,
+  GetRoomResponseSchema,
+  PokerService,
+  SystemService,
+  WaitForTurnResponseSchema,
+} from "./gen/poker/v1/poker_pb.js";
 
 describe("generated ConnectRPC contract", () => {
   it("contains the health endpoint used by Web and CLI", () => {
@@ -24,5 +30,7 @@ describe("generated ConnectRPC contract", () => {
     ]);
     expect(PokerService.method.getGameConfig.methodKind).toBe("unary");
     expect(PokerService.method.watchRoom.methodKind).toBe("server_streaming");
+    expect(GetRoomResponseSchema.fields.map((field) => field.name)).toContain("events");
+    expect(WaitForTurnResponseSchema.fields.map((field) => field.name)).toContain("events");
   });
 });

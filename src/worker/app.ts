@@ -237,9 +237,13 @@ export class PokerMatch extends DurableObject<Env> {
     return roomView(result.state, agent.agent_id);
   }
 
-  async getRoom(token?: string): Promise<RoomData> {
+  async getRoom(token?: string): Promise<{ room: RoomData; events: EventData[] }> {
     const agent = token ? await this.agentForToken(token) : undefined;
-    return roomView(this.repository.loadState().state, agent?.agent_id);
+    const state = this.repository.loadState().state;
+    return {
+      room: roomView(state, agent?.agent_id),
+      events: this.repository.eventsForHand(state.handNumber),
+    };
   }
 
   async getMyScore(token: string): Promise<number> {
@@ -262,6 +266,7 @@ export class PokerMatch extends DurableObject<Env> {
     yourTurn: boolean;
     changed: boolean;
     room: RoomData;
+    events: EventData[];
   }> {
     const agent = await this.agentForToken(token);
     let state = this.repository.loadState().state;
@@ -269,10 +274,12 @@ export class PokerMatch extends DurableObject<Env> {
       await this.waitForSignal(Math.max(0, Math.min(timeoutMs, 25_000)));
       state = this.repository.loadState().state;
     }
+    const events = this.readEvents(afterEventSeq);
     return {
       yourTurn: state.decision?.seat === seatFor(state, agent.agent_id),
-      changed: state.eventSeq > afterEventSeq,
+      changed: events.length > 0,
       room: roomView(state, agent.agent_id),
+      events,
     };
   }
 
