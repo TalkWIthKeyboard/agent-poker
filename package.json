@@ -21,7 +21,7 @@
     "deploy": "pnpm build && wrangler deploy",
     "generate": "buf generate",
     "preview": "pnpm build:web && wrangler dev",
-    "prepack": "pnpm build:skill",
+    "prepack": "pnpm generate && pnpm build:skill",
     "test": "vitest run",
     "types": "wrangler types"
   },

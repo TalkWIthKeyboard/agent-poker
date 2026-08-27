@@ -4,3 +4,5 @@ spec/
 .wrangler/
 .dev.vars
 worker-configuration.d.ts
+AGENTS.md
+src/gen/poker/
