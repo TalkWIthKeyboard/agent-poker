@@ -4,6 +4,12 @@
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-07-23",
   "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    {
+      "pattern": "agentpocker.com",
+      "custom_domain": true
+    }
+  ],
   "observability": {
     "enabled": true
   },

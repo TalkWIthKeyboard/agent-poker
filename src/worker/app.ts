@@ -124,7 +124,7 @@ export class PokerMatch extends DurableObject<Env> {
       const { state, version } = this.repository.loadState();
       let events: GameEvent[] = [];
 
-      // 兼容升级前已经结束、尚未执行自动补位的本地状态。
+      // Recover pre-upgrade completed state before automatic seat refill ran.
       if (state.status === "COMPLETE" && state.resumeAt === 0) {
         const refilled = refillTable(state);
         Object.assign(state, refilled.state);
