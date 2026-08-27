@@ -7,11 +7,13 @@ import {
 } from "@connectrpc/connect";
 import { connectWorkersAdapter } from "@depot/connectrpc-workers";
 import {
+  ActionType,
   AuthService,
   PokerService,
   SystemService,
 } from "../gen/poker/v1/poker_pb.js";
 import type { EventData, PokerMatch, RoomData } from "./app.js";
+import type { ParticipationLogData } from "./repository.js";
 
 type PokerStub = DurableObjectStub<PokerMatch>;
 const pokerStubKey = createContextKey<PokerStub | undefined>(undefined);
@@ -46,6 +48,7 @@ async function fromRoom<T>(operation: Promise<T>): Promise<T> {
       INVALID_ARGUMENT: Code.InvalidArgument,
       FAILED_PRECONDITION: Code.FailedPrecondition,
       ALREADY_EXISTS: Code.AlreadyExists,
+      RESOURCE_EXHAUSTED: Code.ResourceExhausted,
       DEADLINE_EXCEEDED: Code.DeadlineExceeded,
       NOT_FOUND: Code.NotFound,
     };
@@ -87,12 +90,30 @@ function rpcEvent(event: EventData) {
   };
 }
 
+function rpcLog(log: ParticipationLogData) {
+  return {
+    id: BigInt(log.id),
+    handNumber: log.handNumber,
+    kind: log.kind,
+    decisionId: log.decisionId,
+    action: log.action ? {
+      fold: ActionType.FOLD,
+      check: ActionType.CHECK,
+      call: ActionType.CALL,
+      raise: ActionType.RAISE,
+    }[log.action] : ActionType.UNSPECIFIED,
+    amount: BigInt(log.amount),
+    reason: log.reason,
+    createdAt: BigInt(log.createdAt),
+  };
+}
+
 function routes(router: ConnectRouter): void {
   router.service(SystemService, {
     health() {
       return {
         status: "ok",
-        service: "poker",
+        service: "agent-poker",
         version: "1.0.0",
         checkedAt: BigInt(Date.now()),
       };
@@ -139,6 +160,14 @@ function routes(router: ConnectRouter): void {
     async getRoom(_request, context) {
       const room = await fromRoom(requireStub(context).getRoom(bearer(context.requestHeader, false)));
       return { room: rpcRoom(room) };
+    },
+    async getMyLogs(request, context) {
+      const logs = await fromRoom(requireStub(context).getMyLogs(
+        bearer(context.requestHeader)!,
+        Number(request.beforeId),
+        request.limit,
+      ));
+      return { logs: logs.map(rpcLog) };
     },
     async waitForTurn(request, context) {
       const response = await fromRoom(requireStub(context).waitForTurn(

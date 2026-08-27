@@ -1,4 +1,4 @@
-import type { GameState } from "../game.js";
+import type { GameAction, GameState } from "../game.js";
 import type { EventData } from "./app.js";
 import initialMigration from "./migrations/0001_initial.sql";
 
@@ -21,6 +21,24 @@ interface StateRow {
   [key: string]: SqlStorageValue;
   state_json: string;
   state_version: number;
+}
+
+interface LogRow {
+  [key: string]: SqlStorageValue;
+  id: number;
+  event_json: string;
+  created_at: number;
+}
+
+export interface ParticipationLogData {
+  id: number;
+  handNumber: number;
+  kind: string;
+  decisionId: string;
+  action?: GameAction;
+  amount: number;
+  reason: string;
+  createdAt: number;
 }
 
 export class PokerRepository {
@@ -154,7 +172,10 @@ export class PokerRepository {
     const row = this.storage.sql.exec<StateRow>(
       "SELECT state_json, state_version FROM room_state WHERE id = 1",
     ).one();
-    return { state: JSON.parse(row.state_json) as GameState, version: row.state_version };
+    const state = JSON.parse(row.state_json) as GameState;
+    state.waitingPlayers ??= [];
+    state.resumeAt ??= 0;
+    return { state, version: row.state_version };
   }
 
   saveState(input: {
@@ -191,6 +212,7 @@ export class PokerRepository {
           kind: "DECISION_OPENED",
           decisionId: state.decision.id,
           agentId: state.players.find((player) => player.seat === state.decision?.seat)?.agentId,
+          handNumber: state.handNumber,
           decision: state.decision,
         }),
         input.now,
@@ -228,4 +250,46 @@ export class PokerRepository {
       after,
     ).toArray().map((row) => JSON.parse(row.event_json) as EventData);
   }
+
+  participationLogs(agentId: string, beforeId: number, limit: number): ParticipationLogData[] {
+    return this.storage.sql.exec<LogRow>(
+      `SELECT id, event_json, created_at
+       FROM game_events
+       WHERE public_seq IS NULL
+         AND json_extract(event_json, '$.agentId') = ?
+         AND json_extract(event_json, '$.kind') <> 'DECISION_OPENED'
+         AND (? = 0 OR id < ?)
+       ORDER BY id DESC
+       LIMIT ?`,
+      agentId,
+      beforeId,
+      beforeId,
+      limit,
+    ).toArray().map(logData);
+  }
+}
+
+function logData(row: LogRow): ParticipationLogData {
+  const event = JSON.parse(row.event_json) as {
+    kind?: unknown;
+    decisionId?: unknown;
+    action?: unknown;
+    amount?: unknown;
+    reason?: unknown;
+    state?: { handNumber?: unknown };
+  };
+  const action = typeof event.action === "string"
+    && ["fold", "check", "call", "raise"].includes(event.action)
+    ? event.action as GameAction
+    : undefined;
+  return {
+    id: row.id,
+    handNumber: typeof event.state?.handNumber === "number" ? event.state.handNumber : 0,
+    kind: typeof event.kind === "string" ? event.kind : "",
+    decisionId: typeof event.decisionId === "string" ? event.decisionId : "",
+    action,
+    amount: typeof event.amount === "number" ? event.amount : 0,
+    reason: typeof event.reason === "string" ? event.reason : "",
+    createdAt: row.created_at,
+  };
 }

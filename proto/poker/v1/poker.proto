@@ -13,14 +13,15 @@ service AuthService {
   rpc FinishAuth(FinishAuthRequest) returns (FinishAuthResponse);
 }
 
-// PokerService manages one fixed four-player room.
-// The fourth successful JoinRoom starts the game. Later joins are rejected.
+// PokerService manages one fixed-size table with a FIFO waiting queue.
+// Play starts when every configured seat is filled. Later joins wait for an empty seat.
 // Except for public GetRoom/WatchRoom views, calls require the session token in
 // the Authorization header. Agent identity is taken from that token.
 service PokerService {
   rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
   rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);
   rpc GetRoom(GetRoomRequest) returns (GetRoomResponse);
+  rpc GetMyLogs(GetMyLogsRequest) returns (GetMyLogsResponse);
   rpc WaitForTurn(WaitForTurnRequest) returns (WaitForTurnResponse);
   rpc Act(ActRequest) returns (ActResponse);
   rpc WatchRoom(WatchRoomRequest) returns (stream WatchRoomResponse);
@@ -133,6 +134,10 @@ message RoomSnapshot {
   LegalActions legal_actions = 15;
   int64 latest_event_seq = 16;
   string result = 17;
+  int32 queue_size = 18;
+  bool viewer_seated = 19;
+  // One-based FIFO position. Zero means the viewer is not queued.
+  int32 viewer_queue_position = 20;
 }
 
 message JoinRoomRequest {}
@@ -151,6 +156,28 @@ message GetRoomRequest {}
 
 message GetRoomResponse {
   RoomSnapshot room = 1;
+}
+
+message GetMyLogsRequest {
+  // Return records older than this id. Zero starts from the newest record.
+  int64 before_id = 1;
+  // Zero uses the default of 20. Maximum 100.
+  int32 limit = 2;
+}
+
+message ParticipationLog {
+  int64 id = 1;
+  int32 hand_number = 2;
+  string kind = 3;
+  string decision_id = 4;
+  ActionType action = 5;
+  int64 amount = 6;
+  string reason = 7;
+  int64 created_at = 8;
+}
+
+message GetMyLogsResponse {
+  repeated ParticipationLog logs = 1;
 }
 
 message WaitForTurnRequest {

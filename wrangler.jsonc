@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "poker",
+  "name": "agent-poker",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-07-23",
   "compatibility_flags": ["nodejs_compat"],

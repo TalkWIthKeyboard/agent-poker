@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { act, legalActions, startMatch } from "./game.js";
+import { GAME_CONFIG } from "./config.js";
+import { act, legalActions, refillTable, startMatch, startNextHand } from "./game.js";
 
 const players = Array.from({ length: 4 }, (_, seat) => ({
   agentId: `agent-${seat}`,
   displayName: `Player ${seat}`,
   seat,
 }));
+const totalChips = GAME_CONFIG.playerCount * GAME_CONFIG.startingStack;
 
 describe("poker game", () => {
   it("posts blinds and starts with the seat after the big blind", () => {
@@ -19,52 +21,88 @@ describe("poker game", () => {
       actions: ["fold", "call", "raise"],
       callAmount: 10,
       minRaiseTo: 20,
-      maxRaiseTo: 100,
+      maxRaiseTo: GAME_CONFIG.startingStack,
     });
   });
 
   it("finishes a four-way all-in match and conserves chips", () => {
     let state = startMatch(players, winningDeck(), 1_000, "match-1", "decision-1").state;
-    state = act(state, "decision-1", "raise", 100, 1_001, "decision-2", orderedDeck()).state;
-    state = act(state, "decision-2", "call", 0, 1_002, "decision-3", orderedDeck()).state;
-    state = act(state, "decision-3", "call", 0, 1_003, "decision-4", orderedDeck()).state;
-    state = act(state, "decision-4", "call", 0, 1_004, "decision-5", orderedDeck()).state;
+    state = act(state, "decision-1", "raise", GAME_CONFIG.startingStack, 1_001, "decision-2").state;
+    state = act(state, "decision-2", "call", 0, 1_002, "decision-3").state;
+    state = act(state, "decision-3", "call", 0, 1_003, "decision-4").state;
+    state = act(state, "decision-4", "call", 0, 1_004, "decision-5").state;
 
-    expect(state.status).toBe("COMPLETE");
-    expect(state.players.reduce((sum, player) => sum + player.stack + player.totalBet, 0)).toBe(400);
+    expect(state.status).toBe("PLAYING");
+    expect(state.street).toBe("SHOWDOWN");
+    expect(state.players.reduce((sum, player) => sum + player.stack + player.totalBet, 0)).toBe(totalChips);
     expect(state.players.filter((player) => player.stack > 0)).toHaveLength(1);
     expect(state.players.reduce((sum, player) => sum + player.totalBet, 0)).toBe(0);
     expect(Object.keys(state.lastRevealed)).toHaveLength(4);
   });
 
+  it("removes busted players and fills their seats from the queue in FIFO order", () => {
+    let state = startMatch(players, winningDeck(), 1_000, "match-1", "decision-1").state;
+    state.waitingPlayers = [
+      { agentId: "queued-1", displayName: "Queued 1" },
+      { agentId: "queued-2", displayName: "Queued 2" },
+      { agentId: "queued-3", displayName: "Queued 3" },
+    ];
+    state = act(state, "decision-1", "raise", GAME_CONFIG.startingStack, 1_001, "decision-2").state;
+    state = act(state, "decision-2", "call", 0, 1_002, "decision-3").state;
+    state = act(state, "decision-3", "call", 0, 1_003, "decision-4").state;
+    state = act(state, "decision-4", "call", 0, 1_004, "decision-5").state;
+
+    expect(state.street).toBe("SHOWDOWN");
+    expect(state.resumeAt).toBeGreaterThan(1_004);
+    const survivor = state.players.find((player) => player.stack > 0)!;
+    const refilled = refillTable(state);
+
+    expect(refilled.state.players).toHaveLength(4);
+    expect(refilled.state.players.find((player) => player.agentId === survivor.agentId)?.stack).toBe(totalChips);
+    expect(refilled.state.players.filter((player) => player.agentId.startsWith("queued-")))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ agentId: "queued-1", stack: GAME_CONFIG.startingStack }),
+        expect.objectContaining({ agentId: "queued-2", stack: GAME_CONFIG.startingStack }),
+        expect.objectContaining({ agentId: "queued-3", stack: GAME_CONFIG.startingStack }),
+      ]));
+    expect(refilled.state.waitingPlayers).toEqual([]);
+    expect(refilled.events.filter((event) => event.kind === "PLAYER_ELIMINATED")).toHaveLength(3);
+    expect(refilled.events.filter((event) => event.kind === "PLAYER_SEATED")).toHaveLength(3);
+  });
+
   it("rejects a consumed decision", () => {
     const state = startMatch(players, orderedDeck(), 1_000, "match-1", "decision-1").state;
-    const next = act(state, "decision-1", "call", 0, 1_001, "decision-2", orderedDeck()).state;
+    const next = act(state, "decision-1", "call", 0, 1_001, "decision-2").state;
 
-    expect(() => act(next, "decision-1", "call", 0, 1_002, "decision-3", orderedDeck()))
+    expect(() => act(next, "decision-1", "call", 0, 1_002, "decision-3"))
       .toThrow("decision is no longer current");
   });
 
   it("starts the next hand when three players fold", () => {
     let state = startMatch(players, orderedDeck(), 1_000, "match-1", "decision-1").state;
-    state = act(state, "decision-1", "fold", 0, 1_001, "decision-2", winningDeck()).state;
-    state = act(state, "decision-2", "fold", 0, 1_002, "decision-3", winningDeck()).state;
-    const completed = act(state, "decision-3", "fold", 0, 1_003, "decision-4", winningDeck());
+    state = act(state, "decision-1", "fold", 0, 1_001, "decision-2").state;
+    state = act(state, "decision-2", "fold", 0, 1_002, "decision-3").state;
+    const completed = act(state, "decision-3", "fold", 0, 1_003, "decision-4");
     state = completed.state;
 
     expect(state.status).toBe("PLAYING");
-    expect(state.handNumber).toBe(2);
-    expect(state.players.reduce((sum, player) => sum + player.stack + player.totalBet, 0)).toBe(400);
-    expect(state.result).toBe("");
-    expect(state.players.filter((player) => player.stack > 0).every((player) => !player.folded)).toBe(true);
+    expect(state.street).toBe("SHOWDOWN");
+    expect(state.handNumber).toBe(1);
+    expect(state.players.reduce((sum, player) => sum + player.stack + player.totalBet, 0)).toBe(totalChips);
+    expect(state.result).toContain("won 15");
     expect(completed.events.some((event) => event.message.includes("won 15"))).toBe(true);
     expect(state.lastRevealed).toEqual({});
+
+    state = startNextHand(refillTable(state).state, winningDeck(), 2_000, "decision-5").state;
+    expect(state.handNumber).toBe(2);
+    expect(state.result).toBe("");
+    expect(state.players.every((player) => !player.folded)).toBe(true);
   });
 
   it("does not mutate the input state", () => {
     const state = startMatch(players, orderedDeck(), 1_000, "match-1", "decision-1").state;
     const before = structuredClone(state);
-    act(state, "decision-1", "call", 0, 1_001, "decision-2", winningDeck());
+    act(state, "decision-1", "call", 0, 1_001, "decision-2");
     expect(state).toEqual(before);
   });
 
@@ -75,15 +113,15 @@ describe("poker game", () => {
     state.players[1].stack = 55;
     state.players[2].stack = 270;
 
-    state = act(state, "decision-1", "raise", 20, 1_001, "decision-2", orderedDeck()).state;
-    state = act(state, "decision-2", "raise", 40, 1_002, "decision-3", orderedDeck()).state;
-    state = act(state, "decision-3", "call", 0, 1_003, "decision-4", orderedDeck()).state;
-    state = act(state, "decision-4", "raise", 280, 1_004, "decision-5", orderedDeck()).state;
-    const completed = act(state, "decision-5", "call", 0, 1_005, "decision-6", orderedDeck());
+    state = act(state, "decision-1", "raise", 20, 1_001, "decision-2").state;
+    state = act(state, "decision-2", "raise", 40, 1_002, "decision-3").state;
+    state = act(state, "decision-3", "call", 0, 1_003, "decision-4").state;
+    state = act(state, "decision-4", "raise", 280, 1_004, "decision-5").state;
+    const completed = act(state, "decision-5", "call", 0, 1_005, "decision-6");
     state = completed.state;
 
     expect(state.players.reduce((sum, player) => sum + player.stack + player.totalBet, 0)).toBe(400);
-    expect(state.result).toBe("");
+    expect(state.result).toContain("won");
     expect(completed.events.some((event) => event.message.includes("won"))).toBe(true);
     expect(state.handNumber).toBeGreaterThanOrEqual(1);
   });
@@ -92,9 +130,10 @@ describe("poker game", () => {
     let state = startMatch(players, orderedDeck(), 1_000, "match-1", "decision-1").state;
     state.players[3].stack = 3;
     state.players[0].stack = 197;
-    state = act(state, "decision-1", "fold", 0, 1_001, "decision-2", winningDeck()).state;
-    state = act(state, "decision-2", "fold", 0, 1_002, "decision-3", winningDeck()).state;
-    state = act(state, "decision-3", "fold", 0, 1_003, "decision-4", winningDeck()).state;
+    state = act(state, "decision-1", "fold", 0, 1_001, "decision-2").state;
+    state = act(state, "decision-2", "fold", 0, 1_002, "decision-3").state;
+    state = act(state, "decision-3", "fold", 0, 1_003, "decision-4").state;
+    state = startNextHand(refillTable(state).state, winningDeck(), 2_000, "decision-5").state;
 
     expect(state.handNumber).toBe(2);
     expect(state.players[3].totalBet).toBe(3);

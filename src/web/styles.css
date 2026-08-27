@@ -70,7 +70,7 @@ h1 {
 
 .summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   border: 1px solid #27332d;
   border-radius: 12px;
   overflow: hidden;
@@ -151,7 +151,8 @@ h1 {
 }
 
 .fold-badge,
-.eliminated-badge {
+.eliminated-badge,
+.turn-timer {
   position: absolute;
   top: 13px;
   right: 13px;
@@ -170,10 +171,11 @@ h1 {
   background: #18201c;
 }
 
-.seat-0 { left: 50%; top: -7px; transform: translateX(-50%); }
-.seat-1 { right: -8px; top: 50%; transform: translateY(-50%); }
-.seat-2 { left: 50%; bottom: -7px; transform: translateX(-50%); }
-.seat-3 { left: -8px; top: 50%; transform: translateY(-50%); }
+.turn-timer {
+  border-color: #e6c968;
+  color: #f4df91;
+  background: #332d18;
+}
 
 .seat h2 {
   margin: 5px 0 0;
@@ -296,9 +298,17 @@ h1 {
 .feed ol { margin: 0; padding: 0; list-style: none; }
 
 .feed li {
+  display: grid;
+  gap: 4px;
   padding: 11px 18px;
   border-bottom: 1px solid rgba(39, 51, 45, .7);
   font-size: 13px;
+}
+
+.feed li small {
+  color: #7f9087;
+  font: 500 10px/1.3 ui-monospace, monospace;
+  letter-spacing: .08em;
 }
 
 .feed li:last-child { border: 0; }
@@ -319,10 +329,12 @@ h1 {
   .seat {
     position: relative;
     inset: auto;
+    left: auto !important;
+    top: auto !important;
     width: 100%;
     min-height: 105px;
     margin-bottom: 10px;
-    transform: none;
+    transform: none !important;
   }
   .board {
     top: 34px;

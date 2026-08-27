@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file poker/v1/poker.proto.
  */
 export const file_poker_v1_poker: GenFile = /*@__PURE__*/
-  fileDesc("ChRwb2tlci92MS9wb2tlci5wcm90bxIIcG9rZXIudjEiDwoNSGVhbHRoUmVxdWVzdCJWCg5IZWFsdGhSZXNwb25zZRIOCgZzdGF0dXMYASABKAkSDwoHc2VydmljZRgCIAEoCRIPCgd2ZXJzaW9uGAMgASgJEhIKCmNoZWNrZWRfYXQYBCABKAMiSgoMQWdlbnRQcm9maWxlEhAKCGFnZW50X2lkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRISCgpjcmVhdGVkX2F0GAMgASgDIiYKEEJlZ2luQXV0aFJlcXVlc3QSEgoKcHVibGljX2tleRgBIAEoDCJQChFCZWdpbkF1dGhSZXNwb25zZRIUCgxjaGFsbGVuZ2VfaWQYASABKAkSEQoJY2hhbGxlbmdlGAIgASgMEhIKCmV4cGlyZXNfYXQYAyABKAMiZgoRRmluaXNoQXV0aFJlcXVlc3QSFAoMY2hhbGxlbmdlX2lkGAEgASgJEhIKCnB1YmxpY19rZXkYAiABKAwSEQoJc2lnbmF0dXJlGAMgASgMEhQKDGRpc3BsYXlfbmFtZRgEIAEoCSJmChJGaW5pc2hBdXRoUmVzcG9uc2USJQoFYWdlbnQYASABKAsyFi5wb2tlci52MS5BZ2VudFByb2ZpbGUSFQoNc2Vzc2lvbl90b2tlbhgCIAEoCRISCgpleHBpcmVzX2F0GAMgASgDIiIKBENhcmQSDAoEcmFuaxgBIAEoCRIMCgRzdWl0GAIgASgJIsABCgpQbGF5ZXJWaWV3EhAKCGFnZW50X2lkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIMCgRzZWF0GAMgASgFEg0KBXN0YWNrGAQgASgDEhIKCnN0cmVldF9iZXQYBSABKAMSEQoJdG90YWxfYmV0GAYgASgDEg4KBmZvbGRlZBgHIAEoCBIOCgZhbGxfaW4YCCABKAgSJgoOcmV2ZWFsZWRfY2FyZHMYCSADKAsyDi5wb2tlci52MS5DYXJkInYKDExlZ2FsQWN0aW9ucxIlCgdhY3Rpb25zGAEgAygOMhQucG9rZXIudjEuQWN0aW9uVHlwZRITCgtjYWxsX2Ftb3VudBgCIAEoAxIUCgxtaW5fcmFpc2VfdG8YAyABKAMSFAoMbWF4X3JhaXNlX3RvGAQgASgDIuYDCgxSb29tU25hcHNob3QSJAoGc3RhdHVzGAEgASgOMhQucG9rZXIudjEuUm9vbVN0YXR1cxIQCghjYXBhY2l0eRgCIAEoBRITCgtoYW5kX251bWJlchgDIAEoBRIgCgZzdHJlZXQYBCABKA4yEC5wb2tlci52MS5TdHJlZXQSCwoDcG90GAUgASgDEhMKC2N1cnJlbnRfYmV0GAYgASgDEhMKC2RlYWxlcl9zZWF0GAcgASgFEhMKC2FjdGluZ19zZWF0GAggASgFEhcKD2FjdGluZ19hZ2VudF9pZBgJIAEoCRITCgtkZWNpc2lvbl9pZBgKIAEoCRIZChFkZWNpc2lvbl9kZWFkbGluZRgLIAEoAxInCg9jb21tdW5pdHlfY2FyZHMYDCADKAsyDi5wb2tlci52MS5DYXJkEikKEXZpZXdlcl9ob2xlX2NhcmRzGA0gAygLMg4ucG9rZXIudjEuQ2FyZBIlCgdwbGF5ZXJzGA4gAygLMhQucG9rZXIudjEuUGxheWVyVmlldxItCg1sZWdhbF9hY3Rpb25zGA8gASgLMhYucG9rZXIudjEuTGVnYWxBY3Rpb25zEhgKEGxhdGVzdF9ldmVudF9zZXEYECABKAMSDgoGcmVzdWx0GBEgASgJIhEKD0pvaW5Sb29tUmVxdWVzdCI4ChBKb2luUm9vbVJlc3BvbnNlEiQKBHJvb20YASABKAsyFi5wb2tlci52MS5Sb29tU25hcHNob3QiEgoQTGVhdmVSb29tUmVxdWVzdCI5ChFMZWF2ZVJvb21SZXNwb25zZRIkCgRyb29tGAEgASgLMhYucG9rZXIudjEuUm9vbVNuYXBzaG90IhAKDkdldFJvb21SZXF1ZXN0IjcKD0dldFJvb21SZXNwb25zZRIkCgRyb29tGAEgASgLMhYucG9rZXIudjEuUm9vbVNuYXBzaG90IkEKEldhaXRGb3JUdXJuUmVxdWVzdBIXCg9hZnRlcl9ldmVudF9zZXEYASABKAMSEgoKdGltZW91dF9tcxgCIAEoBSJfChNXYWl0Rm9yVHVyblJlc3BvbnNlEhEKCXlvdXJfdHVybhgBIAEoCBIPCgdjaGFuZ2VkGAIgASgIEiQKBHJvb20YAyABKAsyFi5wb2tlci52MS5Sb29tU25hcHNob3QiZwoKQWN0UmVxdWVzdBITCgtkZWNpc2lvbl9pZBgBIAEoCRIkCgZhY3Rpb24YAiABKA4yFC5wb2tlci52MS5BY3Rpb25UeXBlEg4KBmFtb3VudBgDIAEoAxIOCgZyZWFzb24YBCABKAkiYAoLQWN0UmVzcG9uc2USJAoEcm9vbRgBIAEoCzIWLnBva2VyLnYxLlJvb21TbmFwc2hvdBIrCg5hY2NlcHRlZF9ldmVudBgCIAEoCzITLnBva2VyLnYxLlJvb21FdmVudCIrChBXYXRjaFJvb21SZXF1ZXN0EhcKD2FmdGVyX2V2ZW50X3NlcRgBIAEoAyI3ChFXYXRjaFJvb21SZXNwb25zZRIiCgVldmVudBgBIAEoCzITLnBva2VyLnYxLlJvb21FdmVudCKYAQoJUm9vbUV2ZW50EgsKA3NlcRgBIAEoAxITCgtoYW5kX251bWJlchgCIAEoBRIMCgRraW5kGAMgASgJEhAKCGFnZW50X2lkGAQgASgJEg8KB21lc3NhZ2UYBSABKAkSEgoKY3JlYXRlZF9hdBgGIAEoAxIkCgRyb29tGAcgASgLMhYucG9rZXIudjEuUm9vbVNuYXBzaG90KoEBCgpSb29tU3RhdHVzEhsKF1JPT01fU1RBVFVTX1VOU1BFQ0lGSUVEEAASIwofUk9PTV9TVEFUVVNfV0FJVElOR19GT1JfUExBWUVSUxABEhcKE1JPT01fU1RBVFVTX1BMQVlJTkcQAhIYChRST09NX1NUQVRVU19DT01QTEVURRADKn0KBlN0cmVldBIWChJTVFJFRVRfVU5TUEVDSUZJRUQQABISCg5TVFJFRVRfUFJFRkxPUBABEg8KC1NUUkVFVF9GTE9QEAISDwoLU1RSRUVUX1RVUk4QAxIQCgxTVFJFRVRfUklWRVIQBBITCg9TVFJFRVRfU0hPV0RPV04QBSqDAQoKQWN0aW9uVHlwZRIbChdBQ1RJT05fVFlQRV9VTlNQRUNJRklFRBAAEhQKEEFDVElPTl9UWVBFX0ZPTEQQARIVChFBQ1RJT05fVFlQRV9DSEVDSxACEhQKEEFDVElPTl9UWVBFX0NBTEwQAxIVChFBQ1RJT05fVFlQRV9SQUlTRRAEMkwKDVN5c3RlbVNlcnZpY2USOwoGSGVhbHRoEhcucG9rZXIudjEuSGVhbHRoUmVxdWVzdBoYLnBva2VyLnYxLkhlYWx0aFJlc3BvbnNlMpwBCgtBdXRoU2VydmljZRJECglCZWdpbkF1dGgSGi5wb2tlci52MS5CZWdpbkF1dGhSZXF1ZXN0GhsucG9rZXIudjEuQmVnaW5BdXRoUmVzcG9uc2USRwoKRmluaXNoQXV0aBIbLnBva2VyLnYxLkZpbmlzaEF1dGhSZXF1ZXN0GhwucG9rZXIudjEuRmluaXNoQXV0aFJlc3BvbnNlMp8DCgxQb2tlclNlcnZpY2USQQoISm9pblJvb20SGS5wb2tlci52MS5Kb2luUm9vbVJlcXVlc3QaGi5wb2tlci52MS5Kb2luUm9vbVJlc3BvbnNlEkQKCUxlYXZlUm9vbRIaLnBva2VyLnYxLkxlYXZlUm9vbVJlcXVlc3QaGy5wb2tlci52MS5MZWF2ZVJvb21SZXNwb25zZRI+CgdHZXRSb29tEhgucG9rZXIudjEuR2V0Um9vbVJlcXVlc3QaGS5wb2tlci52MS5HZXRSb29tUmVzcG9uc2USSgoLV2FpdEZvclR1cm4SHC5wb2tlci52MS5XYWl0Rm9yVHVyblJlcXVlc3QaHS5wb2tlci52MS5XYWl0Rm9yVHVyblJlc3BvbnNlEjIKA0FjdBIULnBva2VyLnYxLkFjdFJlcXVlc3QaFS5wb2tlci52MS5BY3RSZXNwb25zZRJGCglXYXRjaFJvb20SGi5wb2tlci52MS5XYXRjaFJvb21SZXF1ZXN0GhsucG9rZXIudjEuV2F0Y2hSb29tUmVzcG9uc2UwAWIGcHJvdG8z");
+  fileDesc("ChRwb2tlci92MS9wb2tlci5wcm90bxIIcG9rZXIudjEiDwoNSGVhbHRoUmVxdWVzdCJWCg5IZWFsdGhSZXNwb25zZRIOCgZzdGF0dXMYASABKAkSDwoHc2VydmljZRgCIAEoCRIPCgd2ZXJzaW9uGAMgASgJEhIKCmNoZWNrZWRfYXQYBCABKAMiSgoMQWdlbnRQcm9maWxlEhAKCGFnZW50X2lkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRISCgpjcmVhdGVkX2F0GAMgASgDIiYKEEJlZ2luQXV0aFJlcXVlc3QSEgoKcHVibGljX2tleRgBIAEoDCJQChFCZWdpbkF1dGhSZXNwb25zZRIUCgxjaGFsbGVuZ2VfaWQYASABKAkSEQoJY2hhbGxlbmdlGAIgASgMEhIKCmV4cGlyZXNfYXQYAyABKAMiZgoRRmluaXNoQXV0aFJlcXVlc3QSFAoMY2hhbGxlbmdlX2lkGAEgASgJEhIKCnB1YmxpY19rZXkYAiABKAwSEQoJc2lnbmF0dXJlGAMgASgMEhQKDGRpc3BsYXlfbmFtZRgEIAEoCSJmChJGaW5pc2hBdXRoUmVzcG9uc2USJQoFYWdlbnQYASABKAsyFi5wb2tlci52MS5BZ2VudFByb2ZpbGUSFQoNc2Vzc2lvbl90b2tlbhgCIAEoCRISCgpleHBpcmVzX2F0GAMgASgDIiIKBENhcmQSDAoEcmFuaxgBIAEoCRIMCgRzdWl0GAIgASgJIsABCgpQbGF5ZXJWaWV3EhAKCGFnZW50X2lkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIMCgRzZWF0GAMgASgFEg0KBXN0YWNrGAQgASgDEhIKCnN0cmVldF9iZXQYBSABKAMSEQoJdG90YWxfYmV0GAYgASgDEg4KBmZvbGRlZBgHIAEoCBIOCgZhbGxfaW4YCCABKAgSJgoOcmV2ZWFsZWRfY2FyZHMYCSADKAsyDi5wb2tlci52MS5DYXJkInYKDExlZ2FsQWN0aW9ucxIlCgdhY3Rpb25zGAEgAygOMhQucG9rZXIudjEuQWN0aW9uVHlwZRITCgtjYWxsX2Ftb3VudBgCIAEoAxIUCgxtaW5fcmFpc2VfdG8YAyABKAMSFAoMbWF4X3JhaXNlX3RvGAQgASgDIrAECgxSb29tU25hcHNob3QSJAoGc3RhdHVzGAEgASgOMhQucG9rZXIudjEuUm9vbVN0YXR1cxIQCghjYXBhY2l0eRgCIAEoBRITCgtoYW5kX251bWJlchgDIAEoBRIgCgZzdHJlZXQYBCABKA4yEC5wb2tlci52MS5TdHJlZXQSCwoDcG90GAUgASgDEhMKC2N1cnJlbnRfYmV0GAYgASgDEhMKC2RlYWxlcl9zZWF0GAcgASgFEhMKC2FjdGluZ19zZWF0GAggASgFEhcKD2FjdGluZ19hZ2VudF9pZBgJIAEoCRITCgtkZWNpc2lvbl9pZBgKIAEoCRIZChFkZWNpc2lvbl9kZWFkbGluZRgLIAEoAxInCg9jb21tdW5pdHlfY2FyZHMYDCADKAsyDi5wb2tlci52MS5DYXJkEikKEXZpZXdlcl9ob2xlX2NhcmRzGA0gAygLMg4ucG9rZXIudjEuQ2FyZBIlCgdwbGF5ZXJzGA4gAygLMhQucG9rZXIudjEuUGxheWVyVmlldxItCg1sZWdhbF9hY3Rpb25zGA8gASgLMhYucG9rZXIudjEuTGVnYWxBY3Rpb25zEhgKEGxhdGVzdF9ldmVudF9zZXEYECABKAMSDgoGcmVzdWx0GBEgASgJEhIKCnF1ZXVlX3NpemUYEiABKAUSFQoNdmlld2VyX3NlYXRlZBgTIAEoCBIdChV2aWV3ZXJfcXVldWVfcG9zaXRpb24YFCABKAUiEQoPSm9pblJvb21SZXF1ZXN0IjgKEEpvaW5Sb29tUmVzcG9uc2USJAoEcm9vbRgBIAEoCzIWLnBva2VyLnYxLlJvb21TbmFwc2hvdCISChBMZWF2ZVJvb21SZXF1ZXN0IjkKEUxlYXZlUm9vbVJlc3BvbnNlEiQKBHJvb20YASABKAsyFi5wb2tlci52MS5Sb29tU25hcHNob3QiEAoOR2V0Um9vbVJlcXVlc3QiNwoPR2V0Um9vbVJlc3BvbnNlEiQKBHJvb20YASABKAsyFi5wb2tlci52MS5Sb29tU25hcHNob3QiNAoQR2V0TXlMb2dzUmVxdWVzdBIRCgliZWZvcmVfaWQYASABKAMSDQoFbGltaXQYAiABKAUisAEKEFBhcnRpY2lwYXRpb25Mb2cSCgoCaWQYASABKAMSEwoLaGFuZF9udW1iZXIYAiABKAUSDAoEa2luZBgDIAEoCRITCgtkZWNpc2lvbl9pZBgEIAEoCRIkCgZhY3Rpb24YBSABKA4yFC5wb2tlci52MS5BY3Rpb25UeXBlEg4KBmFtb3VudBgGIAEoAxIOCgZyZWFzb24YByABKAkSEgoKY3JlYXRlZF9hdBgIIAEoAyI9ChFHZXRNeUxvZ3NSZXNwb25zZRIoCgRsb2dzGAEgAygLMhoucG9rZXIudjEuUGFydGljaXBhdGlvbkxvZyJBChJXYWl0Rm9yVHVyblJlcXVlc3QSFwoPYWZ0ZXJfZXZlbnRfc2VxGAEgASgDEhIKCnRpbWVvdXRfbXMYAiABKAUiXwoTV2FpdEZvclR1cm5SZXNwb25zZRIRCgl5b3VyX3R1cm4YASABKAgSDwoHY2hhbmdlZBgCIAEoCBIkCgRyb29tGAMgASgLMhYucG9rZXIudjEuUm9vbVNuYXBzaG90ImcKCkFjdFJlcXVlc3QSEwoLZGVjaXNpb25faWQYASABKAkSJAoGYWN0aW9uGAIgASgOMhQucG9rZXIudjEuQWN0aW9uVHlwZRIOCgZhbW91bnQYAyABKAMSDgoGcmVhc29uGAQgASgJImAKC0FjdFJlc3BvbnNlEiQKBHJvb20YASABKAsyFi5wb2tlci52MS5Sb29tU25hcHNob3QSKwoOYWNjZXB0ZWRfZXZlbnQYAiABKAsyEy5wb2tlci52MS5Sb29tRXZlbnQiKwoQV2F0Y2hSb29tUmVxdWVzdBIXCg9hZnRlcl9ldmVudF9zZXEYASABKAMiNwoRV2F0Y2hSb29tUmVzcG9uc2USIgoFZXZlbnQYASABKAsyEy5wb2tlci52MS5Sb29tRXZlbnQimAEKCVJvb21FdmVudBILCgNzZXEYASABKAMSEwoLaGFuZF9udW1iZXIYAiABKAUSDAoEa2luZBgDIAEoCRIQCghhZ2VudF9pZBgEIAEoCRIPCgdtZXNzYWdlGAUgASgJEhIKCmNyZWF0ZWRfYXQYBiABKAMSJAoEcm9vbRgHIAEoCzIWLnBva2VyLnYxLlJvb21TbmFwc2hvdCqBAQoKUm9vbVN0YXR1cxIbChdST09NX1NUQVRVU19VTlNQRUNJRklFRBAAEiMKH1JPT01fU1RBVFVTX1dBSVRJTkdfRk9SX1BMQVlFUlMQARIXChNST09NX1NUQVRVU19QTEFZSU5HEAISGAoUUk9PTV9TVEFUVVNfQ09NUExFVEUQAyp9CgZTdHJlZXQSFgoSU1RSRUVUX1VOU1BFQ0lGSUVEEAASEgoOU1RSRUVUX1BSRUZMT1AQARIPCgtTVFJFRVRfRkxPUBACEg8KC1NUUkVFVF9UVVJOEAMSEAoMU1RSRUVUX1JJVkVSEAQSEwoPU1RSRUVUX1NIT1dET1dOEAUqgwEKCkFjdGlvblR5cGUSGwoXQUNUSU9OX1RZUEVfVU5TUEVDSUZJRUQQABIUChBBQ1RJT05fVFlQRV9GT0xEEAESFQoRQUNUSU9OX1RZUEVfQ0hFQ0sQAhIUChBBQ1RJT05fVFlQRV9DQUxMEAMSFQoRQUNUSU9OX1RZUEVfUkFJU0UQBDJMCg1TeXN0ZW1TZXJ2aWNlEjsKBkhlYWx0aBIXLnBva2VyLnYxLkhlYWx0aFJlcXVlc3QaGC5wb2tlci52MS5IZWFsdGhSZXNwb25zZTKcAQoLQXV0aFNlcnZpY2USRAoJQmVnaW5BdXRoEhoucG9rZXIudjEuQmVnaW5BdXRoUmVxdWVzdBobLnBva2VyLnYxLkJlZ2luQXV0aFJlc3BvbnNlEkcKCkZpbmlzaEF1dGgSGy5wb2tlci52MS5GaW5pc2hBdXRoUmVxdWVzdBocLnBva2VyLnYxLkZpbmlzaEF1dGhSZXNwb25zZTLlAwoMUG9rZXJTZXJ2aWNlEkEKCEpvaW5Sb29tEhkucG9rZXIudjEuSm9pblJvb21SZXF1ZXN0GhoucG9rZXIudjEuSm9pblJvb21SZXNwb25zZRJECglMZWF2ZVJvb20SGi5wb2tlci52MS5MZWF2ZVJvb21SZXF1ZXN0GhsucG9rZXIudjEuTGVhdmVSb29tUmVzcG9uc2USPgoHR2V0Um9vbRIYLnBva2VyLnYxLkdldFJvb21SZXF1ZXN0GhkucG9rZXIudjEuR2V0Um9vbVJlc3BvbnNlEkQKCUdldE15TG9ncxIaLnBva2VyLnYxLkdldE15TG9nc1JlcXVlc3QaGy5wb2tlci52MS5HZXRNeUxvZ3NSZXNwb25zZRJKCgtXYWl0Rm9yVHVybhIcLnBva2VyLnYxLldhaXRGb3JUdXJuUmVxdWVzdBodLnBva2VyLnYxLldhaXRGb3JUdXJuUmVzcG9uc2USMgoDQWN0EhQucG9rZXIudjEuQWN0UmVxdWVzdBoVLnBva2VyLnYxLkFjdFJlc3BvbnNlEkYKCVdhdGNoUm9vbRIaLnBva2VyLnYxLldhdGNoUm9vbVJlcXVlc3QaGy5wb2tlci52MS5XYXRjaFJvb21SZXNwb25zZTABYgZwcm90bzM");
 
 /**
  * @generated from message poker.v1.HealthRequest
@@ -392,6 +392,23 @@ export type RoomSnapshot = Message<"poker.v1.RoomSnapshot"> & {
    * @generated from field: string result = 17;
    */
   result: string;
+
+  /**
+   * @generated from field: int32 queue_size = 18;
+   */
+  queueSize: number;
+
+  /**
+   * @generated from field: bool viewer_seated = 19;
+   */
+  viewerSeated: boolean;
+
+  /**
+   * One-based FIFO position. Zero means the viewer is not queued.
+   *
+   * @generated from field: int32 viewer_queue_position = 20;
+   */
+  viewerQueuePosition: number;
 };
 
 /**
@@ -492,6 +509,101 @@ export const GetRoomResponseSchema: GenMessage<GetRoomResponse> = /*@__PURE__*/
   messageDesc(file_poker_v1_poker, 16);
 
 /**
+ * @generated from message poker.v1.GetMyLogsRequest
+ */
+export type GetMyLogsRequest = Message<"poker.v1.GetMyLogsRequest"> & {
+  /**
+   * Return records older than this id. Zero starts from the newest record.
+   *
+   * @generated from field: int64 before_id = 1;
+   */
+  beforeId: bigint;
+
+  /**
+   * Zero uses the default of 20. Maximum 100.
+   *
+   * @generated from field: int32 limit = 2;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message poker.v1.GetMyLogsRequest.
+ * Use `create(GetMyLogsRequestSchema)` to create a new message.
+ */
+export const GetMyLogsRequestSchema: GenMessage<GetMyLogsRequest> = /*@__PURE__*/
+  messageDesc(file_poker_v1_poker, 17);
+
+/**
+ * @generated from message poker.v1.ParticipationLog
+ */
+export type ParticipationLog = Message<"poker.v1.ParticipationLog"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: int32 hand_number = 2;
+   */
+  handNumber: number;
+
+  /**
+   * @generated from field: string kind = 3;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: string decision_id = 4;
+   */
+  decisionId: string;
+
+  /**
+   * @generated from field: poker.v1.ActionType action = 5;
+   */
+  action: ActionType;
+
+  /**
+   * @generated from field: int64 amount = 6;
+   */
+  amount: bigint;
+
+  /**
+   * @generated from field: string reason = 7;
+   */
+  reason: string;
+
+  /**
+   * @generated from field: int64 created_at = 8;
+   */
+  createdAt: bigint;
+};
+
+/**
+ * Describes the message poker.v1.ParticipationLog.
+ * Use `create(ParticipationLogSchema)` to create a new message.
+ */
+export const ParticipationLogSchema: GenMessage<ParticipationLog> = /*@__PURE__*/
+  messageDesc(file_poker_v1_poker, 18);
+
+/**
+ * @generated from message poker.v1.GetMyLogsResponse
+ */
+export type GetMyLogsResponse = Message<"poker.v1.GetMyLogsResponse"> & {
+  /**
+   * @generated from field: repeated poker.v1.ParticipationLog logs = 1;
+   */
+  logs: ParticipationLog[];
+};
+
+/**
+ * Describes the message poker.v1.GetMyLogsResponse.
+ * Use `create(GetMyLogsResponseSchema)` to create a new message.
+ */
+export const GetMyLogsResponseSchema: GenMessage<GetMyLogsResponse> = /*@__PURE__*/
+  messageDesc(file_poker_v1_poker, 19);
+
+/**
  * @generated from message poker.v1.WaitForTurnRequest
  */
 export type WaitForTurnRequest = Message<"poker.v1.WaitForTurnRequest"> & {
@@ -511,7 +623,7 @@ export type WaitForTurnRequest = Message<"poker.v1.WaitForTurnRequest"> & {
  * Use `create(WaitForTurnRequestSchema)` to create a new message.
  */
 export const WaitForTurnRequestSchema: GenMessage<WaitForTurnRequest> = /*@__PURE__*/
-  messageDesc(file_poker_v1_poker, 17);
+  messageDesc(file_poker_v1_poker, 20);
 
 /**
  * @generated from message poker.v1.WaitForTurnResponse
@@ -538,7 +650,7 @@ export type WaitForTurnResponse = Message<"poker.v1.WaitForTurnResponse"> & {
  * Use `create(WaitForTurnResponseSchema)` to create a new message.
  */
 export const WaitForTurnResponseSchema: GenMessage<WaitForTurnResponse> = /*@__PURE__*/
-  messageDesc(file_poker_v1_poker, 18);
+  messageDesc(file_poker_v1_poker, 21);
 
 /**
  * @generated from message poker.v1.ActRequest
@@ -572,7 +684,7 @@ export type ActRequest = Message<"poker.v1.ActRequest"> & {
  * Use `create(ActRequestSchema)` to create a new message.
  */
 export const ActRequestSchema: GenMessage<ActRequest> = /*@__PURE__*/
-  messageDesc(file_poker_v1_poker, 19);
+  messageDesc(file_poker_v1_poker, 22);
 
 /**
  * @generated from message poker.v1.ActResponse
@@ -594,7 +706,7 @@ export type ActResponse = Message<"poker.v1.ActResponse"> & {
  * Use `create(ActResponseSchema)` to create a new message.
  */
 export const ActResponseSchema: GenMessage<ActResponse> = /*@__PURE__*/
-  messageDesc(file_poker_v1_poker, 20);
+  messageDesc(file_poker_v1_poker, 23);
 
 /**
  * @generated from message poker.v1.WatchRoomRequest
@@ -611,7 +723,7 @@ export type WatchRoomRequest = Message<"poker.v1.WatchRoomRequest"> & {
  * Use `create(WatchRoomRequestSchema)` to create a new message.
  */
 export const WatchRoomRequestSchema: GenMessage<WatchRoomRequest> = /*@__PURE__*/
-  messageDesc(file_poker_v1_poker, 21);
+  messageDesc(file_poker_v1_poker, 24);
 
 /**
  * @generated from message poker.v1.WatchRoomResponse
@@ -628,7 +740,7 @@ export type WatchRoomResponse = Message<"poker.v1.WatchRoomResponse"> & {
  * Use `create(WatchRoomResponseSchema)` to create a new message.
  */
 export const WatchRoomResponseSchema: GenMessage<WatchRoomResponse> = /*@__PURE__*/
-  messageDesc(file_poker_v1_poker, 22);
+  messageDesc(file_poker_v1_poker, 25);
 
 /**
  * @generated from message poker.v1.RoomEvent
@@ -675,7 +787,7 @@ export type RoomEvent = Message<"poker.v1.RoomEvent"> & {
  * Use `create(RoomEventSchema)` to create a new message.
  */
 export const RoomEventSchema: GenMessage<RoomEvent> = /*@__PURE__*/
-  messageDesc(file_poker_v1_poker, 23);
+  messageDesc(file_poker_v1_poker, 26);
 
 /**
  * @generated from enum poker.v1.RoomStatus
@@ -827,8 +939,8 @@ export const AuthService: GenService<{
   serviceDesc(file_poker_v1_poker, 1);
 
 /**
- * PokerService manages one fixed four-player room.
- * The fourth successful JoinRoom starts the game. Later joins are rejected.
+ * PokerService manages one fixed-size table with a FIFO waiting queue.
+ * Play starts when every configured seat is filled. Later joins wait for an empty seat.
  * Except for public GetRoom/WatchRoom views, calls require the session token in
  * the Authorization header. Agent identity is taken from that token.
  *
@@ -858,6 +970,14 @@ export const PokerService: GenService<{
     methodKind: "unary";
     input: typeof GetRoomRequestSchema;
     output: typeof GetRoomResponseSchema;
+  },
+  /**
+   * @generated from rpc poker.v1.PokerService.GetMyLogs
+   */
+  getMyLogs: {
+    methodKind: "unary";
+    input: typeof GetMyLogsRequestSchema;
+    output: typeof GetMyLogsResponseSchema;
   },
   /**
    * @generated from rpc poker.v1.PokerService.WaitForTurn

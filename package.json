@@ -1,5 +1,5 @@
 {
-  "name": "poker",
+  "name": "agent-poker",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "pnpm generate && pnpm build:web && pnpm build:skill",
-    "build:skill": "rm -rf dist/poker dist/poker-skill.zip && bun build cli/index.ts --target=bun --minify --outfile=dist/poker/scripts/poker && chmod +x dist/poker/scripts/poker && cp .agents/skills/poker/SKILL.md dist/poker/SKILL.md && (cd dist && zip -qr poker-skill.zip poker)",
+    "build:skill": "rm -rf dist/poker dist/agent-poker-skill.zip && bun build cli/index.ts --target=bun --minify --outfile=dist/poker/scripts/poker && chmod +x dist/poker/scripts/poker && cp .agents/skills/poker/SKILL.md dist/poker/SKILL.md && (cd dist && zip -qr agent-poker-skill.zip poker)",
     "build:web": "vite build",
     "check": "pnpm generate && tsc --noEmit && pnpm test",
     "dev": "pnpm build:web && wrangler dev",

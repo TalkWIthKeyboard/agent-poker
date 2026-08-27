@@ -33,6 +33,7 @@ Commands:
   join
   leave
   status
+  logs [--before <id>] [--limit <count>]
   wait [--after <seq>] [--timeout <ms>]
   act <fold|check|call|raise> --decision <id> [--to <amount>] [--reason <text>]
 
@@ -62,6 +63,8 @@ async function main(): Promise<void> {
       home: { type: "string", default: process.env.POKER_HOME ?? join(homedir(), ".poker") },
       name: { type: "string", default: process.env.POKER_NAME },
       after: { type: "string", default: "0" },
+      before: { type: "string", default: "0" },
+      limit: { type: "string", default: "20" },
       timeout: { type: "string", default: "25000" },
       decision: { type: "string", short: "d" },
       to: { type: "string", default: "0" },
@@ -77,7 +80,7 @@ async function main(): Promise<void> {
   const [command, actionName, ...extra] = positionals;
   if (extra.length > 0) throw new Error(`unexpected argument: ${extra[0]}`);
   if (command !== "act" && actionName) throw new Error(`unexpected argument: ${actionName}`);
-  if (!["join", "leave", "status", "wait", "act"].includes(command)) {
+  if (!["join", "leave", "status", "logs", "wait", "act"].includes(command)) {
     throw new Error(`unknown command: ${command}`);
   }
   if (command === "act" && !actionName) throw new Error("missing action");
@@ -94,11 +97,22 @@ async function main(): Promise<void> {
   if (command === "join") return print(await client.joinRoom({}, { headers }));
   if (command === "leave") return print(await client.leaveRoom({}, { headers }));
   if (command === "status") return print(await client.getRoom({}, { headers }));
-  if (command === "wait") {
-    return print(await client.waitForTurn({
-      afterEventSeq: BigInt(values.after),
-      timeoutMs: Number(values.timeout),
+  if (command === "logs") {
+    return print(await client.getMyLogs({
+      beforeId: BigInt(values.before),
+      limit: Number(values.limit),
     }, { headers }));
+  }
+  if (command === "wait") {
+    let afterEventSeq = BigInt(values.after);
+    while (true) {
+      const response = await client.waitForTurn({
+        afterEventSeq,
+        timeoutMs: Number(values.timeout),
+      }, { headers });
+      if (!response.room || response.room.viewerQueuePosition === 0) return print(response);
+      afterEventSeq = response.room.latestEventSeq;
+    }
   }
   if (command === "act") {
     return print(await client.act({
@@ -116,6 +130,11 @@ function transport(server: string) {
 
 async function authenticate(options: Options): Promise<string> {
   mkdirSync(options.home, { recursive: true, mode: 0o700 });
+  const strategyPath = join(options.home, "strategy.md");
+  if (!existsSync(strategyPath)) {
+    writeFileSync(strategyPath, "", { flag: "wx", mode: 0o600 });
+    process.stderr.write(`Created ${strategyPath}. Add your poker strategy before playing.\n`);
+  }
   const sessionPath = join(options.home, "session.json");
   if (existsSync(sessionPath)) {
     const session = JSON.parse(readFileSync(sessionPath, "utf8")) as Session;
@@ -176,6 +195,9 @@ function parseAction(value: string): ActionType {
 function print(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, (key, item) => {
     if (typeof item === "bigint") return item.toString();
+    if (key === "action" && typeof item === "number") {
+      return item === ActionType.UNSPECIFIED ? undefined : ActionType[item].toLowerCase();
+    }
     if (key === "actions" && Array.isArray(item)) {
       return item.map((action) => ActionType[action as ActionType].toLowerCase());
     }

@@ -8,15 +8,21 @@ import {
 import {
   act as playAction,
   emptyGame,
-  INITIAL_STACK,
   legalActions,
+  refillTable,
   shuffledDeck,
   startMatch,
+  startNextHand,
   type GameAction,
   type GameEvent,
   type GameState,
 } from "../game.js";
-import { PokerRepository, type AgentRow } from "./repository.js";
+import { GAME_CONFIG } from "../config.js";
+import {
+  PokerRepository,
+  type AgentRow,
+  type ParticipationLogData,
+} from "./repository.js";
 
 export type RoomData = ReturnType<typeof roomView>;
 
@@ -112,26 +118,47 @@ export class PokerMatch extends DurableObject<Env> {
 
   async joinRoom(token: string): Promise<RoomData> {
     const agent = await this.agentForToken(token);
-    const matchId = crypto.randomUUID();
-    const decisionId = crypto.randomUUID();
-    // 第四名玩家加入时会立刻开局；未满四人时这副预洗牌不会被使用。
-    const deck = shuffledDeck();
     const now = Date.now();
 
     const result = this.repository.transaction(() => {
       const { state, version } = this.repository.loadState();
-      if (state.status !== "WAITING") fail("FAILED_PRECONDITION", "match has already started");
-      if (state.players.some((player) => player.agentId === agent.agent_id)) {
-        return { state, events: [] as EventData[] };
-      }
-      if (state.players.length >= 4) fail("ALREADY_EXISTS", "room is full");
+      let events: GameEvent[] = [];
 
-      const seat = [0, 1, 2, 3].find((candidate) => !state.players.some((player) => player.seat === candidate))!;
+      // 兼容升级前已经结束、尚未执行自动补位的本地状态。
+      if (state.status === "COMPLETE" && state.resumeAt === 0) {
+        const refilled = refillTable(state);
+        Object.assign(state, refilled.state);
+        events.push(...refilled.events);
+      }
+
+      const alreadyJoined = state.players.some((player) => player.agentId === agent.agent_id)
+        || state.waitingPlayers.some((player) => player.agentId === agent.agent_id);
+      if (alreadyJoined) {
+        return events.length > 0
+          ? this.saveState(state, version, events, "JOIN", undefined, { agentId: agent.agent_id })
+          : { state, events: [] as EventData[] };
+      }
+
+      if (state.status !== "WAITING" || state.players.length >= GAME_CONFIG.playerCount) {
+        if (state.waitingPlayers.length >= GAME_CONFIG.maxQueueSize) {
+          fail("RESOURCE_EXHAUSTED", "waiting queue is full");
+        }
+        state.waitingPlayers.push({ agentId: agent.agent_id, displayName: agent.display_name });
+        events.push({
+          kind: "PLAYER_QUEUED",
+          agentId: agent.agent_id,
+          message: `${agent.display_name} joined the waiting queue.`,
+        });
+        return this.saveState(state, version, events, "JOIN", undefined, { agentId: agent.agent_id });
+      }
+
+      const seat = Array.from({ length: GAME_CONFIG.playerCount }, (_, candidate) => candidate)
+        .find((candidate) => !state.players.some((player) => player.seat === candidate))!;
       state.players.push({
         agentId: agent.agent_id,
         displayName: agent.display_name,
         seat,
-        stack: INITIAL_STACK,
+        stack: GAME_CONFIG.startingStack,
         streetBet: 0,
         totalBet: 0,
         hole: [],
@@ -139,15 +166,18 @@ export class PokerMatch extends DurableObject<Env> {
         allIn: false,
         acted: false,
       });
-      let events: GameEvent[] = [{
+      events.push({
         kind: "PLAYER_JOINED",
         agentId: agent.agent_id,
         message: `${agent.display_name} joined seat ${seat}.`,
-      }];
+      });
 
-      if (state.players.length === 4) {
-        const started = startMatch(state.players, deck, now, matchId, decisionId);
+      if (state.players.length === GAME_CONFIG.playerCount) {
+        const started = state.handNumber === 0
+          ? startMatch(state.players, shuffledDeck(), now, crypto.randomUUID(), crypto.randomUUID())
+          : startNextHand(state, shuffledDeck(), now, crypto.randomUUID());
         started.state.eventSeq = state.eventSeq;
+        started.state.waitingPlayers = state.waitingPlayers;
         Object.assign(state, started.state);
         events = [...events, ...started.events];
       }
@@ -163,6 +193,15 @@ export class PokerMatch extends DurableObject<Env> {
     const agent = await this.agentForToken(token);
     const result = this.repository.transaction(() => {
       const { state, version } = this.repository.loadState();
+      const queued = state.waitingPlayers.findIndex((candidate) => candidate.agentId === agent.agent_id);
+      if (queued >= 0) {
+        state.waitingPlayers.splice(queued, 1);
+        return this.saveState(state, version, [{
+          kind: "PLAYER_LEFT_QUEUE",
+          agentId: agent.agent_id,
+          message: `${agent.display_name} left the waiting queue.`,
+        }], "LEAVE", undefined, { agentId: agent.agent_id });
+      }
       if (state.status !== "WAITING") fail("FAILED_PRECONDITION", "players cannot leave after the match starts");
       const player = state.players.find((candidate) => candidate.agentId === agent.agent_id);
       if (!player) fail("NOT_FOUND", "agent is not seated");
@@ -171,7 +210,7 @@ export class PokerMatch extends DurableObject<Env> {
         kind: "PLAYER_LEFT",
         agentId: agent.agent_id,
         message: `${agent.display_name} left seat ${player.seat}.`,
-      }], "LEAVE");
+      }], "LEAVE", undefined, { agentId: agent.agent_id });
     });
     this.notifyWaiters();
     return roomView(result.state, agent.agent_id);
@@ -180,6 +219,17 @@ export class PokerMatch extends DurableObject<Env> {
   async getRoom(token?: string): Promise<RoomData> {
     const agent = token ? await this.agentForToken(token) : undefined;
     return roomView(this.repository.loadState().state, agent?.agent_id);
+  }
+
+  async getMyLogs(token: string, beforeId: number, limit: number): Promise<ParticipationLogData[]> {
+    const agent = await this.agentForToken(token);
+    if (!Number.isSafeInteger(beforeId) || beforeId < 0) {
+      fail("INVALID_ARGUMENT", "before_id must be a non-negative safe integer");
+    }
+    if (!Number.isInteger(limit) || limit < 0 || limit > 100) {
+      fail("INVALID_ARGUMENT", "limit must be between 0 and 100");
+    }
+    return this.repository.participationLogs(agent.agent_id, beforeId, limit || 20);
   }
 
   async waitForTurn(token: string, afterEventSeq: number, timeoutMs: number): Promise<{
@@ -214,15 +264,13 @@ export class PokerMatch extends DurableObject<Env> {
 
     const now = Date.now();
     const newDecisionId = crypto.randomUUID();
-    // 本次行动可能结束当前手牌并在同一事务内开下一手；只有该分支会使用它。
-    const nextDeck = shuffledDeck();
     const result = this.repository.transaction(() => {
       const { state, version } = this.repository.loadState();
       const acting = state.players.find((player) => player.seat === state.decision?.seat);
       if (!acting || acting.agentId !== agent.agent_id) fail("PERMISSION_DENIED", "it is not this agent's turn");
       let played;
       try {
-        played = playAction(state, decisionId, action, amount, now, newDecisionId, nextDeck);
+        played = playAction(state, decisionId, action, amount, now, newDecisionId);
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         fail(message.includes("expired") ? "DEADLINE_EXCEEDED" : "FAILED_PRECONDITION", message);
@@ -233,7 +281,7 @@ export class PokerMatch extends DurableObject<Env> {
         played.events,
         "DECISION_ACTED",
         decisionId,
-        { action, amount, reason },
+        { agentId: agent.agent_id, action, amount, reason },
       );
     });
 
@@ -254,26 +302,40 @@ export class PokerMatch extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     const now = Date.now();
-    const newDecisionId = crypto.randomUUID();
-    // 超时行动也可能结束当前手牌，nextDeck 的使用时机与普通 act 相同。
-    const nextDeck = shuffledDeck();
     const result = this.repository.transaction(() => {
       const { state, version } = this.repository.loadState();
+
+      if (state.resumeAt > 0 && state.resumeAt <= now) {
+        const refilled = refillTable(state);
+        Object.assign(state, refilled.state);
+        let events = refilled.events;
+        if (state.players.length === GAME_CONFIG.playerCount) {
+          const started = startNextHand(state, shuffledDeck(), now, crypto.randomUUID());
+          Object.assign(state, started.state);
+          events = [...events, ...started.events];
+        }
+        return this.saveState(state, version, events, "TABLE_RESUMED");
+      }
+
       if (!state.decision || state.decision.deadline > now) return undefined;
       const decisionId = state.decision.id;
+      const acting = state.players.find((player) => player.seat === state.decision?.seat)!;
       const legal = legalActions(state, state.decision.seat);
       const action: GameAction = legal.actions.includes("check") ? "check" : "fold";
-      const played = playAction(state, decisionId, action, 0, now, newDecisionId, nextDeck, true);
+      const played = playAction(state, decisionId, action, 0, now, crypto.randomUUID(), true);
       return this.saveState(
         played.state,
         version,
         played.events,
         "DECISION_TIMED_OUT",
         decisionId,
-        { action },
+        { agentId: acting.agentId, action },
       );
     });
-    if (!result) return;
+    if (!result) {
+      await this.scheduleAlarm(this.repository.loadState().state);
+      return;
+    }
     await this.scheduleAlarm(result.state);
     this.notifyWaiters();
   }
@@ -326,7 +388,8 @@ export class PokerMatch extends DurableObject<Env> {
   }
 
   private async scheduleAlarm(state: GameState): Promise<void> {
-    if (state.decision) await this.ctx.storage.setAlarm(state.decision.deadline);
+    const scheduledAt = state.decision?.deadline ?? state.resumeAt;
+    if (scheduledAt > 0) await this.ctx.storage.setAlarm(scheduledAt);
     else await this.ctx.storage.deleteAlarm();
   }
 
@@ -359,7 +422,7 @@ function roomView(state: GameState, viewerAgentId?: string) {
       : state.status === "PLAYING"
         ? RoomStatus.PLAYING
         : RoomStatus.COMPLETE,
-    capacity: 4,
+    capacity: GAME_CONFIG.playerCount,
     handNumber: state.handNumber,
     street: {
       PREFLOP: Street.PREFLOP,
@@ -374,7 +437,7 @@ function roomView(state: GameState, viewerAgentId?: string) {
     actingSeat: state.decision?.seat ?? -1,
     actingAgentId: decisionPlayer?.agentId ?? "",
     decisionId: viewerCanAct ? state.decision?.id ?? "" : "",
-    decisionDeadline: viewerCanAct ? state.decision?.deadline ?? 0 : 0,
+    decisionDeadline: state.decision?.deadline ?? 0,
     communityCards: state.community.map(cardData),
     viewerHoleCards: viewer?.hole.map(cardData) ?? [],
     players: state.players.map((player) => ({
@@ -396,6 +459,11 @@ function roomView(state: GameState, viewerAgentId?: string) {
     },
     latestEventSeq: state.eventSeq,
     result: state.result,
+    queueSize: state.waitingPlayers.length,
+    viewerSeated: Boolean(viewer),
+    viewerQueuePosition: viewerAgentId
+      ? state.waitingPlayers.findIndex((player) => player.agentId === viewerAgentId) + 1
+      : 0,
   };
 }
 

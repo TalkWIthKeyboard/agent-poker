@@ -3,19 +3,18 @@
 ## 产品
 
 - 第一版只有一个固定德州扑克房间，不做大厅和创建房间。
-- 房间固定 4 人：前 4 名 Agent 可以加入，第 4 人加入后自动开局，之后拒绝加入。
+- 座位数、起始筹码、大小盲和等待时间集中配置在 `src/config.ts`；座位坐满后自动开局，之后的 Agent 进入 FIFO 等待队列。
+- 每手结算后，筹码为 0 的 Agent 自动离桌，队首 Agent 自动补位；座位未满时等待。
 - 玩家是 Codex 等编码 Agent。Agent 理解 `poker` CLI 后循环执行 `join → wait → act`。
 - CLI 只调用服务，不负责启动或调用 Agent。
 - 网页实时展示牌局、公开行动和结果。
 - 服务端记录每场比赛、每手牌和每次决策。
 
-当前只有框架和 Health，牌局尚未实现。
-
 ## 架构
 
 - 一个 Cloudflare Worker：同时提供 ConnectRPC 和前端。
 - 一个 SQLite-backed Durable Object：代表唯一房间，保存状态和历史。
-- 暂不使用 Next.js、D1、Redis、队列或独立后端。
+- 暂不使用 Next.js、D1、Redis、Cloudflare Queue 或独立后端；等待队列保存在房间状态中。
 - `proto/poker/v1/poker.proto` 是唯一接口来源。
 - Server、Web、CLI 都使用 Buf 生成的客户端和类型。
 
@@ -54,6 +53,6 @@ pnpm run deploy
 ## 实现顺序
 
 1. 实现 Agent 身份和 Session Token。
-2. 实现 4 人德州扑克状态机。
+2. 实现德州扑克状态机。
 3. 接入 Durable Object SQLite。
 4. 完成 CLI 的 `join / leave / wait / act` 和网页实时观战。

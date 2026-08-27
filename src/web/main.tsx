@@ -21,6 +21,12 @@ function App() {
   const [room, setRoom] = useState<RoomSnapshot>();
   const [events, setEvents] = useState<RoomEvent[]>([]);
   const [connection, setConnection] = useState("connecting");
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -65,7 +71,7 @@ function App() {
       <header>
         <div>
           <p className="eyebrow">AGENT POKER · LIVE TABLE</p>
-          <h1>Four agents. One table.</h1>
+          <h1>{room?.capacity || "—"} agents. One table.</h1>
         </div>
         <div className={`connection ${connection === "live" ? "online" : ""}`}>
           <span />
@@ -78,10 +84,11 @@ function App() {
         <div><span>Hand</span><strong>#{room?.handNumber || "—"}</strong></div>
         <div><span>Street</span><strong>{streetName(room?.street)}</strong></div>
         <div><span>Pot</span><strong>{room?.pot.toString() ?? "0"}</strong></div>
+        <div><span>Queue</span><strong>{room?.queueSize ?? 0}</strong></div>
       </section>
 
       <section className="table" aria-label="Poker table">
-        {[0, 1, 2, 3].map((seat) => {
+        {Array.from({ length: room?.capacity ?? 0 }, (_, seat) => seat).map((seat) => {
           const player = players.find((candidate) => candidate.seat === seat);
           const acting = room?.actingSeat === seat;
           const displayState = player
@@ -92,13 +99,19 @@ function App() {
           return (
             <article
               key={seat}
-              className={`seat seat-${seat} ${acting ? "acting" : ""} ${folded ? "folded" : ""} ${eliminated ? "eliminated" : ""}`}
+              className={`seat ${acting ? "acting" : ""} ${folded ? "folded" : ""} ${eliminated ? "eliminated" : ""}`}
+              style={seatPosition(seat, room!.capacity)}
             >
               <div className="seat-number">SEAT {seat + 1}</div>
               {player ? (
                 <>
                   {folded && <span className="fold-badge">FOLDED</span>}
                   {eliminated && <span className="eliminated-badge">ELIMINATED</span>}
+                  {acting && room!.decisionDeadline > 0n && (
+                    <span className="turn-timer" aria-label="Time remaining">
+                      {Math.max(0, Math.ceil((Number(room!.decisionDeadline) - now) / 1_000))}s
+                    </span>
+                  )}
                   <h2>{player.displayName}</h2>
                   <strong className="stack">{player.stack.toString()}</strong>
                   <p className={`player-status ${folded ? "is-folded" : ""} ${eliminated ? "is-eliminated" : ""}`}>
@@ -136,6 +149,9 @@ function App() {
           {events.length === 0 && <li className="quiet">Waiting for agents to join…</li>}
           {[...events].reverse().map((event) => (
             <li key={event.seq.toString()}>
+              <small>
+                TURN #{event.seq.toString()} · HAND #{event.handNumber} · {streetName(event.room?.street)}
+              </small>
               <span>{event.message}</span>
             </li>
           ))}
@@ -155,6 +171,15 @@ function cardView(card: Card, index: number) {
   );
 }
 
+function seatPosition(seat: number, capacity: number): React.CSSProperties {
+  const angle = (2 * Math.PI * seat) / capacity - Math.PI / 2;
+  return {
+    left: `${50 + 41 * Math.cos(angle)}%`,
+    top: `${50 + 38 * Math.sin(angle)}%`,
+    transform: "translate(-50%, -50%)",
+  };
+}
+
 function statusName(status?: RoomStatus): string {
   if (status === RoomStatus.WAITING_FOR_PLAYERS) return "WAITING";
   if (status === RoomStatus.PLAYING) return "PLAYING";
@@ -167,8 +192,11 @@ function streetName(street?: Street): string {
 }
 
 function tableMessage(room?: RoomSnapshot): string {
-  if (!room || room.status === RoomStatus.WAITING_FOR_PLAYERS) return "Waiting for four agents";
+  if (!room || room.status === RoomStatus.WAITING_FOR_PLAYERS) {
+    return `Waiting for ${room?.capacity ?? "—"} agents`;
+  }
   if (room.status === RoomStatus.COMPLETE) return room.result || "Match complete";
+  if (room.street === Street.SHOWDOWN) return room.result || "Showdown";
   return room.actingAgentId ? "Action in progress" : "Dealing next hand";
 }
 

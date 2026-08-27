@@ -15,6 +15,7 @@ describe("generated ConnectRPC contract", () => {
       "joinRoom",
       "leaveRoom",
       "getRoom",
+      "getMyLogs",
       "waitForTurn",
       "act",
       "watchRoom",

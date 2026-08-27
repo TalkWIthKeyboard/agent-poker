@@ -1,9 +1,5 @@
 import { evaluate, rank, rankDescription } from "@pokertools/evaluator";
-
-export const INITIAL_STACK = 100;
-export const SMALL_BLIND = 5;
-export const BIG_BLIND = 10;
-export const TURN_MS = 60_000;
+import { GAME_CONFIG } from "./config.js";
 
 export type GameAction = "fold" | "check" | "call" | "raise";
 export type GameStatus = "WAITING" | "PLAYING" | "COMPLETE";
@@ -28,6 +24,11 @@ export interface Decision {
   deadline: number;
 }
 
+export interface WaitingPlayer {
+  agentId: string;
+  displayName: string;
+}
+
 export interface GameState {
   schemaVersion: 1;
   status: GameStatus;
@@ -41,7 +42,9 @@ export interface GameState {
   currentBet: number;
   minRaise: number;
   players: GamePlayer[];
+  waitingPlayers: WaitingPlayer[];
   decision: Decision | null;
+  resumeAt: number;
   eventSeq: number;
   result: string;
   lastRevealed: Record<string, number[]>;
@@ -72,9 +75,11 @@ export function emptyGame(): GameState {
     deck: [],
     deckCursor: 0,
     currentBet: 0,
-    minRaise: BIG_BLIND,
+    minRaise: GAME_CONFIG.bigBlind,
     players: [],
+    waitingPlayers: [],
     decision: null,
+    resumeAt: 0,
     eventSeq: 0,
     result: "",
     lastRevealed: {},
@@ -99,21 +104,81 @@ export function startMatch(
   matchId: string,
   decisionId: string,
 ): { state: GameState; events: GameEvent[] } {
+  if (seatedPlayers.length !== GAME_CONFIG.playerCount) {
+    throw new Error(`${GAME_CONFIG.playerCount} players are required to start a match`);
+  }
   const state = emptyGame();
   state.status = "PLAYING";
   state.matchId = matchId;
-  state.players = seatedPlayers.map((player) => ({
-    ...player,
-    stack: INITIAL_STACK,
-    streetBet: 0,
-    totalBet: 0,
-    hole: [],
-    folded: false,
-    allIn: false,
-    acted: false,
-  }));
-  const events: GameEvent[] = [{ kind: "MATCH_STARTED", message: "Four players joined. Match started." }];
+  state.players = seatedPlayers.map((player) => newPlayer(player, player.seat));
+  const events: GameEvent[] = [{
+    kind: "MATCH_STARTED",
+    message: `${GAME_CONFIG.playerCount} players joined. Match started.`,
+  }];
   startHand(state, deck, now, decisionId, events);
+  return { state, events };
+}
+
+export function startNextHand(
+  current: GameState,
+  deck: number[],
+  now: number,
+  decisionId: string,
+): { state: GameState; events: GameEvent[] } {
+  if (current.players.length !== GAME_CONFIG.playerCount) {
+    throw new Error(`${GAME_CONFIG.playerCount} players are required to start a hand`);
+  }
+  const state = structuredClone(current);
+  const events: GameEvent[] = [];
+  state.status = "PLAYING";
+  startHand(state, deck, now, decisionId, events);
+  return { state, events };
+}
+
+export function refillTable(current: GameState): { state: GameState; events: GameEvent[] } {
+  const state = structuredClone(current);
+  const busted = state.players.filter((player) => player.stack === 0);
+  const events: GameEvent[] = busted.map((player) => ({
+    kind: "PLAYER_ELIMINATED",
+    agentId: player.agentId,
+    message: `${player.displayName} ran out of chips and left seat ${player.seat}.`,
+  }));
+  state.players = state.players.filter((player) => player.stack > 0);
+
+  const openSeats = Array.from({ length: GAME_CONFIG.playerCount }, (_, seat) => seat)
+    .filter((seat) => !state.players.some((player) => player.seat === seat));
+  for (const seat of openSeats) {
+    const waiting = state.waitingPlayers.shift();
+    if (!waiting) break;
+    state.players.push(newPlayer(waiting, seat));
+    events.push({
+      kind: "PLAYER_SEATED",
+      agentId: waiting.agentId,
+      message: `${waiting.displayName} joined seat ${seat} from the queue.`,
+    });
+  }
+
+  state.resumeAt = 0;
+  state.status = state.players.length === GAME_CONFIG.playerCount ? "PLAYING" : "WAITING";
+  if (state.players.length < GAME_CONFIG.playerCount) {
+    state.street = "PREFLOP";
+    state.community = [];
+    state.deck = [];
+    state.deckCursor = 0;
+    state.currentBet = 0;
+    state.minRaise = GAME_CONFIG.bigBlind;
+    state.decision = null;
+    state.result = "";
+    state.lastRevealed = {};
+    for (const player of state.players) {
+      player.streetBet = 0;
+      player.totalBet = 0;
+      player.hole = [];
+      player.folded = false;
+      player.allIn = false;
+      player.acted = false;
+    }
+  }
   return { state, events };
 }
 
@@ -142,7 +207,6 @@ export function act(
   amount: number,
   now: number,
   nextDecisionId: string,
-  nextDeck: number[],
   allowExpired = false,
 ): { state: GameState; events: GameEvent[] } {
   const state = structuredClone(current);
@@ -195,9 +259,9 @@ export function act(
 
   const remaining = state.players.filter((candidate) => !candidate.folded);
   if (remaining.length === 1) {
-    finishHand(state, now, nextDecisionId, nextDeck, events);
+    finishHand(state, now, events);
   } else if (bettingRoundComplete(state)) {
-    advanceStreet(state, now, nextDecisionId, nextDeck, events);
+    advanceStreet(state, now, nextDecisionId, events);
   } else {
     openDecision(state, nextSeatNeedingAction(state, player.seat), now, nextDecisionId);
   }
@@ -222,9 +286,11 @@ function startHand(
   state.deck = deck;
   state.deckCursor = 0;
   state.currentBet = 0;
-  state.minRaise = BIG_BLIND;
+  state.minRaise = GAME_CONFIG.bigBlind;
   state.decision = null;
+  state.resumeAt = 0;
   state.result = "";
+  state.lastRevealed = {};
 
   for (const player of state.players) {
     player.streetBet = 0;
@@ -244,14 +310,22 @@ function startHand(
     ? state.dealerSeat
     : nextActiveSeat(state, state.dealerSeat);
   const bigBlindSeat = nextActiveSeat(state, smallBlindSeat);
-  moveChips(playerAt(state, smallBlindSeat), SMALL_BLIND);
-  moveChips(playerAt(state, bigBlindSeat), BIG_BLIND);
-  state.currentBet = BIG_BLIND;
+  moveChips(playerAt(state, smallBlindSeat), GAME_CONFIG.smallBlind);
+  moveChips(playerAt(state, bigBlindSeat), GAME_CONFIG.bigBlind);
+  state.currentBet = GAME_CONFIG.bigBlind;
 
   const firstToAct = active.length === 2
     ? smallBlindSeat
     : nextActiveSeat(state, bigBlindSeat);
-  openDecision(state, nextSeatNeedingAction(state, (firstToAct + 3) % 4), now, decisionId);
+  openDecision(
+    state,
+    nextSeatNeedingAction(
+      state,
+      (firstToAct + GAME_CONFIG.playerCount - 1) % GAME_CONFIG.playerCount,
+    ),
+    now,
+    decisionId,
+  );
   events.push({ kind: "HAND_STARTED", message: `Hand ${state.handNumber} started.` });
 }
 
@@ -259,7 +333,6 @@ function advanceStreet(
   state: GameState,
   now: number,
   decisionId: string,
-  nextDeck: number[],
   events: GameEvent[],
 ): void {
   for (const player of state.players) {
@@ -267,10 +340,10 @@ function advanceStreet(
     player.acted = false;
   }
   state.currentBet = 0;
-  state.minRaise = BIG_BLIND;
+  state.minRaise = GAME_CONFIG.bigBlind;
 
   if (state.street === "RIVER") {
-    finishHand(state, now, decisionId, nextDeck, events);
+    finishHand(state, now, events);
     return;
   }
 
@@ -288,7 +361,7 @@ function advanceStreet(
 
   const canAct = state.players.filter((player) => !player.folded && !player.allIn);
   if (canAct.length <= 1) {
-    advanceStreet(state, now, decisionId, nextDeck, events);
+    advanceStreet(state, now, decisionId, events);
     return;
   }
   openDecision(state, nextSeatNeedingAction(state, state.dealerSeat), now, decisionId);
@@ -297,8 +370,6 @@ function advanceStreet(
 function finishHand(
   state: GameState,
   now: number,
-  decisionId: string,
-  nextDeck: number[],
   events: GameEvent[],
 ): void {
   while (state.community.length < 5 && state.players.filter((player) => !player.folded).length > 1) {
@@ -306,6 +377,7 @@ function finishHand(
   }
   state.street = "SHOWDOWN";
   state.decision = null;
+  state.resumeAt = now + GAME_CONFIG.showdownDelayMs;
 
   const payouts = new Map<number, number>();
   const contributions = [...new Set(
@@ -328,7 +400,12 @@ function finishHand(
     previous = level;
   }
 
-  for (const player of state.players) player.stack += payouts.get(player.seat) ?? 0;
+  for (const player of state.players) {
+    player.stack += payouts.get(player.seat) ?? 0;
+    player.streetBet = 0;
+    player.totalBet = 0;
+    player.allIn = player.stack === 0;
+  }
   const showdownPlayers = state.players.filter((player) => !player.folded && player.hole.length === 2);
   state.lastRevealed = showdownPlayers.length > 1
     ? Object.fromEntries(showdownPlayers.map((player) => [player.agentId, player.hole]))
@@ -343,25 +420,20 @@ function finishHand(
     : ` (${showdownPlayers.map((player) => `${player.displayName}: ${rankDescription(rank([...player.hole, ...state.community]))}`).join(", ")})`;
   state.result = `${paid}.${description}`;
   events.push({ kind: "HAND_COMPLETED", message: `Hand ${state.handNumber}: ${state.result}` });
+}
 
-  const survivors = state.players.filter((player) => player.stack > 0);
-  if (survivors.length === 1) {
-    for (const player of state.players) {
-      player.streetBet = 0;
-      player.totalBet = 0;
-      player.allIn = player.stack === 0;
-    }
-    state.status = "COMPLETE";
-    state.result = `${survivors[0].displayName} won the match with ${survivors[0].stack} chips.`;
-    events.push({
-      kind: "MATCH_COMPLETED",
-      agentId: survivors[0].agentId,
-      message: state.result,
-    });
-    return;
-  }
-
-  startHand(state, nextDeck, now, decisionId, events);
+function newPlayer(player: WaitingPlayer, seat: number): GamePlayer {
+  return {
+    ...player,
+    seat,
+    stack: GAME_CONFIG.startingStack,
+    streetBet: 0,
+    totalBet: 0,
+    hole: [],
+    folded: false,
+    allIn: false,
+    acted: false,
+  };
 }
 
 function bestPlayers(players: GamePlayer[], community: number[]): GamePlayer[] {
@@ -388,12 +460,12 @@ function bettingRoundComplete(state: GameState): boolean {
 }
 
 function openDecision(state: GameState, seat: number, now: number, id: string): void {
-  state.decision = { id, seat, deadline: now + TURN_MS };
+  state.decision = { id, seat, deadline: now + GAME_CONFIG.actionTimeoutMs };
 }
 
 function nextSeatNeedingAction(state: GameState, afterSeat: number): number {
-  for (let offset = 1; offset <= 4; offset += 1) {
-    const seat = (afterSeat + offset + 4) % 4;
+  for (let offset = 1; offset <= GAME_CONFIG.playerCount; offset += 1) {
+    const seat = (afterSeat + offset + GAME_CONFIG.playerCount) % GAME_CONFIG.playerCount;
     const player = state.players.find((candidate) => candidate.seat === seat);
     if (
       player
@@ -406,8 +478,8 @@ function nextSeatNeedingAction(state: GameState, afterSeat: number): number {
 }
 
 function nextActiveSeat(state: GameState, afterSeat: number): number {
-  for (let offset = 1; offset <= 4; offset += 1) {
-    const seat = (afterSeat + offset + 4) % 4;
+  for (let offset = 1; offset <= GAME_CONFIG.playerCount; offset += 1) {
+    const seat = (afterSeat + offset + GAME_CONFIG.playerCount) % GAME_CONFIG.playerCount;
     if (state.players.some((player) => player.seat === seat && player.stack > 0)) return seat;
   }
   throw new Error("no active seat");
@@ -415,15 +487,18 @@ function nextActiveSeat(state: GameState, afterSeat: number): number {
 
 function orderedActiveSeats(state: GameState, afterSeat: number): number[] {
   const seats: number[] = [];
-  for (let offset = 1; offset <= 4; offset += 1) {
-    const seat = (afterSeat + offset + 4) % 4;
+  for (let offset = 1; offset <= GAME_CONFIG.playerCount; offset += 1) {
+    const seat = (afterSeat + offset + GAME_CONFIG.playerCount) % GAME_CONFIG.playerCount;
     if (state.players.some((player) => player.seat === seat && player.stack > 0)) seats.push(seat);
   }
   return seats;
 }
 
 function orderedSeatsFromDealer(state: GameState, seats: number[]): number[] {
-  return Array.from({ length: 4 }, (_, offset) => (state.dealerSeat + offset + 1) % 4)
+  return Array.from(
+    { length: GAME_CONFIG.playerCount },
+    (_, offset) => (state.dealerSeat + offset + 1) % GAME_CONFIG.playerCount,
+  )
     .filter((seat) => seats.includes(seat));
 }
 
