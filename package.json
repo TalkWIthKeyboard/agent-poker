@@ -1,0 +1,46 @@
+{
+  "name": "poker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "poker": "./dist/poker/scripts/poker"
+  },
+  "scripts": {
+    "build": "pnpm generate && pnpm build:web && pnpm build:skill",
+    "build:skill": "rm -rf dist/poker dist/poker-skill.zip && bun build cli/index.ts --target=bun --minify --outfile=dist/poker/scripts/poker && chmod +x dist/poker/scripts/poker && cp .agents/skills/poker/SKILL.md dist/poker/SKILL.md && (cd dist && zip -qr poker-skill.zip poker)",
+    "build:web": "vite build",
+    "check": "pnpm generate && tsc --noEmit && pnpm test",
+    "dev": "pnpm build:web && wrangler dev",
+    "dev:web": "vite dev",
+    "deploy": "pnpm build && wrangler deploy",
+    "generate": "buf generate",
+    "preview": "pnpm build:web && wrangler dev",
+    "test": "vitest run",
+    "types": "wrangler types"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.13.0",
+    "@connectrpc/connect": "2.1.2",
+    "@connectrpc/connect-node": "2.1.2",
+    "@connectrpc/connect-web": "2.1.2",
+    "@depot/connectrpc-workers": "2.0.0",
+    "@pokertools/evaluator": "1.0.16",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "1.72.0",
+    "@bufbuild/protoc-gen-es": "2.13.0",
+    "@cloudflare/workers-types": "5.20260723.1",
+    "@types/node": "26.1.1",
+    "@types/react": "19.2.16",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.4",
+    "typescript": "7.0.2",
+    "vite": "8.1.5",
+    "vitest": "4.1.10",
+    "wrangler": "4.113.0"
+  },
+  "packageManager": "pnpm@10.22.0"
+}

@@ -1,0 +1,196 @@
+syntax = "proto3";
+
+package poker.v1;
+
+service SystemService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// AuthService verifies a persistent Ed25519 agent identity and issues a
+// short-lived session token. The private key never leaves the local CLI.
+service AuthService {
+  rpc BeginAuth(BeginAuthRequest) returns (BeginAuthResponse);
+  rpc FinishAuth(FinishAuthRequest) returns (FinishAuthResponse);
+}
+
+// PokerService manages one fixed four-player room.
+// The fourth successful JoinRoom starts the game. Later joins are rejected.
+// Except for public GetRoom/WatchRoom views, calls require the session token in
+// the Authorization header. Agent identity is taken from that token.
+service PokerService {
+  rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
+  rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);
+  rpc GetRoom(GetRoomRequest) returns (GetRoomResponse);
+  rpc WaitForTurn(WaitForTurnRequest) returns (WaitForTurnResponse);
+  rpc Act(ActRequest) returns (ActResponse);
+  rpc WatchRoom(WatchRoomRequest) returns (stream WatchRoomResponse);
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  string service = 2;
+  string version = 3;
+  int64 checked_at = 4;
+}
+
+message AgentProfile {
+  // Stable identity derived from SHA-256 of the raw Ed25519 public key.
+  string agent_id = 1;
+  string display_name = 2;
+  int64 created_at = 3;
+}
+
+message BeginAuthRequest {
+  // Raw 32-byte Ed25519 public key.
+  bytes public_key = 1;
+}
+
+message BeginAuthResponse {
+  string challenge_id = 1;
+  bytes challenge = 2;
+  int64 expires_at = 3;
+}
+
+message FinishAuthRequest {
+  string challenge_id = 1;
+  bytes public_key = 2;
+  bytes signature = 3;
+  // Used when this public key is seen for the first time.
+  string display_name = 4;
+}
+
+message FinishAuthResponse {
+  AgentProfile agent = 1;
+  string session_token = 2;
+  int64 expires_at = 3;
+}
+
+enum RoomStatus {
+  ROOM_STATUS_UNSPECIFIED = 0;
+  ROOM_STATUS_WAITING_FOR_PLAYERS = 1;
+  ROOM_STATUS_PLAYING = 2;
+  ROOM_STATUS_COMPLETE = 3;
+}
+
+enum Street {
+  STREET_UNSPECIFIED = 0;
+  STREET_PREFLOP = 1;
+  STREET_FLOP = 2;
+  STREET_TURN = 3;
+  STREET_RIVER = 4;
+  STREET_SHOWDOWN = 5;
+}
+
+enum ActionType {
+  ACTION_TYPE_UNSPECIFIED = 0;
+  ACTION_TYPE_FOLD = 1;
+  ACTION_TYPE_CHECK = 2;
+  ACTION_TYPE_CALL = 3;
+  ACTION_TYPE_RAISE = 4;
+}
+
+message Card {
+  string rank = 1;
+  string suit = 2;
+}
+
+message PlayerView {
+  string agent_id = 1;
+  string display_name = 2;
+  int32 seat = 3;
+  int64 stack = 4;
+  int64 street_bet = 5;
+  int64 total_bet = 6;
+  bool folded = 7;
+  bool all_in = 8;
+  repeated Card revealed_cards = 9;
+}
+
+message LegalActions {
+  repeated ActionType actions = 1;
+  int64 call_amount = 2;
+  int64 min_raise_to = 3;
+  int64 max_raise_to = 4;
+}
+
+message RoomSnapshot {
+  RoomStatus status = 1;
+  int32 capacity = 2;
+  int32 hand_number = 3;
+  Street street = 4;
+  int64 pot = 5;
+  int64 current_bet = 6;
+  int32 dealer_seat = 7;
+  int32 acting_seat = 8;
+  string acting_agent_id = 9;
+  string decision_id = 10;
+  int64 decision_deadline = 11;
+  repeated Card community_cards = 12;
+  repeated Card viewer_hole_cards = 13;
+  repeated PlayerView players = 14;
+  LegalActions legal_actions = 15;
+  int64 latest_event_seq = 16;
+  string result = 17;
+}
+
+message JoinRoomRequest {}
+
+message JoinRoomResponse {
+  RoomSnapshot room = 1;
+}
+
+message LeaveRoomRequest {}
+
+message LeaveRoomResponse {
+  RoomSnapshot room = 1;
+}
+
+message GetRoomRequest {}
+
+message GetRoomResponse {
+  RoomSnapshot room = 1;
+}
+
+message WaitForTurnRequest {
+  int64 after_event_seq = 1;
+  int32 timeout_ms = 2;
+}
+
+message WaitForTurnResponse {
+  bool your_turn = 1;
+  bool changed = 2;
+  RoomSnapshot room = 3;
+}
+
+message ActRequest {
+  string decision_id = 1;
+  ActionType action = 2;
+  // For raise, amount is the target total bet on the current street.
+  int64 amount = 3;
+  string reason = 4;
+}
+
+message ActResponse {
+  RoomSnapshot room = 1;
+  RoomEvent accepted_event = 2;
+}
+
+message WatchRoomRequest {
+  int64 after_event_seq = 1;
+}
+
+message WatchRoomResponse {
+  RoomEvent event = 1;
+}
+
+message RoomEvent {
+  int64 seq = 1;
+  int32 hand_number = 2;
+  string kind = 3;
+  string agent_id = 4;
+  string message = 5;
+  int64 created_at = 6;
+  RoomSnapshot room = 7;
+}

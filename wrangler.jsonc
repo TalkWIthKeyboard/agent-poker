@@ -1,0 +1,34 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "poker",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-07-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/poker.v1.SystemService/*",
+      "/poker.v1.AuthService/*",
+      "/poker.v1.PokerService/*"
+    ]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "POKER_MATCHES",
+        "class_name": "PokerMatch"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["PokerMatch"]
+    }
+  ]
+}
