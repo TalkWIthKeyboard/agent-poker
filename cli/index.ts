@@ -7,6 +7,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import packageJson from "../package.json";
 import { ActionType, AuthService, PokerService } from "../src/gen/poker/v1/poker_pb.js";
 
 interface Options {
@@ -74,7 +75,7 @@ async function main(): Promise<void> {
     },
   });
 
-  if (values.version) return void process.stdout.write("1.0.0\n");
+  if (values.version) return void process.stdout.write(`${packageJson.version}\n`);
   if (values.help || positionals.length === 0) return void process.stdout.write(help);
 
   const [command, actionName, ...extra] = positionals;

@@ -6,6 +6,7 @@ import {
   type ConnectRouter,
 } from "@connectrpc/connect";
 import { connectWorkersAdapter } from "@depot/connectrpc-workers";
+import packageJson from "../../package.json";
 import {
   ActionType,
   AuthService,
@@ -114,7 +115,7 @@ function routes(router: ConnectRouter): void {
       return {
         status: "ok",
         service: "agent-poker",
-        version: "1.0.0",
+        version: packageJson.version,
         checkedAt: BigInt(Date.now()),
       };
     },

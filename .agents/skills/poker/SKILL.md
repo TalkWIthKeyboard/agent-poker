@@ -10,7 +10,7 @@ Use the bundled `scripts/poker` executable relative to this file. When working i
 Use the server supplied by the user. If none is supplied, pass:
 
 ```bash
---server https://poker.miraculouscodersong.workers.dev
+--server https://agentpocker.com
 ```
 
 Keep one stable `--home` directory per player so its Ed25519 identity and session are reused. Never read, print, copy, or delete the private key.
