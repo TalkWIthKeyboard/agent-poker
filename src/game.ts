@@ -16,6 +16,7 @@ export interface GamePlayer {
   folded: boolean;
   allIn: boolean;
   acted: boolean;
+  leaving: boolean;
 }
 
 export interface Decision {
@@ -54,6 +55,7 @@ export interface GameEvent {
   kind: string;
   agentId?: string;
   message: string;
+  scoreDeltas?: Record<string, number>;
 }
 
 export interface LegalActions {
@@ -139,9 +141,11 @@ export function refillTable(current: GameState): { state: GameState; events: Gam
   const state = structuredClone(current);
   const busted = state.players.filter((player) => player.stack === 0);
   const events: GameEvent[] = busted.map((player) => ({
-    kind: "PLAYER_ELIMINATED",
+    kind: player.leaving ? "PLAYER_LEFT" : "PLAYER_ELIMINATED",
     agentId: player.agentId,
-    message: `${player.displayName} ran out of chips and left seat ${player.seat}.`,
+    message: player.leaving
+      ? `${player.displayName} left seat ${player.seat}.`
+      : `${player.displayName} ran out of chips and left seat ${player.seat}.`,
   }));
   state.players = state.players.filter((player) => player.stack > 0);
 
@@ -257,6 +261,54 @@ export function act(
       : `${player.displayName} ${action}ed.`,
   }];
 
+  advanceAfterAction(state, player, now, nextDecisionId, events);
+  return { state, events };
+}
+
+export function leaveGame(
+  current: GameState,
+  agentId: string,
+  now: number,
+  nextDecisionId: string,
+): { state: GameState; events: GameEvent[] } {
+  const state = structuredClone(current);
+  const player = state.players.find((candidate) => candidate.agentId === agentId);
+  if (!player) throw new Error("leaving player does not exist");
+  if (player.leaving) return { state, events: [] };
+
+  const wasFolded = player.folded;
+  player.folded = true;
+  player.acted = true;
+  player.allIn = false;
+  player.stack = 0;
+  player.leaving = true;
+
+  const events: GameEvent[] = [{
+    kind: wasFolded ? "PLAYER_LEAVING" : "ACTION",
+    agentId: player.agentId,
+    message: wasFolded
+      ? `${player.displayName} is leaving after the hand.`
+      : `${player.displayName} folded and is leaving after the hand.`,
+  }];
+
+  if (state.street !== "SHOWDOWN") {
+    if (state.decision?.seat === player.seat) {
+      advanceAfterAction(state, player, now, nextDecisionId, events);
+    } else if (state.players.filter((candidate) => !candidate.folded).length === 1) {
+      finishHand(state, now, events);
+    }
+  }
+
+  return { state, events };
+}
+
+function advanceAfterAction(
+  state: GameState,
+  player: GamePlayer,
+  now: number,
+  nextDecisionId: string,
+  events: GameEvent[],
+): void {
   const remaining = state.players.filter((candidate) => !candidate.folded);
   if (remaining.length === 1) {
     finishHand(state, now, events);
@@ -265,8 +317,6 @@ export function act(
   } else {
     openDecision(state, nextSeatNeedingAction(state, player.seat), now, nextDecisionId);
   }
-
-  return { state, events };
 }
 
 function startHand(
@@ -400,6 +450,10 @@ function finishHand(
     previous = level;
   }
 
+  const scoreDeltas = Object.fromEntries(state.players.map((player) => [
+    player.agentId,
+    (payouts.get(player.seat) ?? 0) - player.totalBet,
+  ]));
   for (const player of state.players) {
     player.stack += payouts.get(player.seat) ?? 0;
     player.streetBet = 0;
@@ -419,7 +473,11 @@ function finishHand(
     ? ""
     : ` (${showdownPlayers.map((player) => `${player.displayName}: ${rankDescription(rank([...player.hole, ...state.community]))}`).join(", ")})`;
   state.result = `${paid}.${description}`;
-  events.push({ kind: "HAND_COMPLETED", message: `Hand ${state.handNumber}: ${state.result}` });
+  events.push({
+    kind: "HAND_COMPLETED",
+    message: `Hand ${state.handNumber}: ${state.result}`,
+    scoreDeltas,
+  });
 }
 
 function newPlayer(player: WaitingPlayer, seat: number): GamePlayer {
@@ -433,6 +491,7 @@ function newPlayer(player: WaitingPlayer, seat: number): GamePlayer {
     folded: false,
     allIn: false,
     acted: false,
+    leaving: false,
   };
 }
 

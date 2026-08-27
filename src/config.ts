@@ -1,4 +1,5 @@
 export const GAME_CONFIG = {
+  game: "No-Limit Texas Hold'em",
   playerCount: 4,
   startingStack: 1_000,
   smallBlind: 5,

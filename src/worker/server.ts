@@ -7,6 +7,7 @@ import {
 } from "@connectrpc/connect";
 import { connectWorkersAdapter } from "@depot/connectrpc-workers";
 import packageJson from "../../package.json";
+import { GAME_CONFIG } from "../config.js";
 import {
   ActionType,
   AuthService,
@@ -150,6 +151,16 @@ function routes(router: ConnectRouter): void {
   });
 
   router.service(PokerService, {
+    getGameConfig() {
+      return {
+        ...GAME_CONFIG,
+        startingStack: BigInt(GAME_CONFIG.startingStack),
+        smallBlind: BigInt(GAME_CONFIG.smallBlind),
+        bigBlind: BigInt(GAME_CONFIG.bigBlind),
+        actionTimeoutMs: BigInt(GAME_CONFIG.actionTimeoutMs),
+        showdownDelayMs: BigInt(GAME_CONFIG.showdownDelayMs),
+      };
+    },
     async joinRoom(_request, context) {
       const room = await fromRoom(requireStub(context).joinRoom(bearer(context.requestHeader)!));
       return { room: rpcRoom(room) };
@@ -161,6 +172,10 @@ function routes(router: ConnectRouter): void {
     async getRoom(_request, context) {
       const room = await fromRoom(requireStub(context).getRoom(bearer(context.requestHeader, false)));
       return { room: rpcRoom(room) };
+    },
+    async getMyScore(_request, context) {
+      const score = await fromRoom(requireStub(context).getMyScore(bearer(context.requestHeader)!));
+      return { score: BigInt(score) };
     },
     async getMyLogs(request, context) {
       const logs = await fromRoom(requireStub(context).getMyLogs(

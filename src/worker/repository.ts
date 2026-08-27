@@ -30,6 +30,11 @@ interface LogRow {
   created_at: number;
 }
 
+interface ScoreRow {
+  [key: string]: SqlStorageValue;
+  score: number;
+}
+
 export interface ParticipationLogData {
   id: number;
   handNumber: number;
@@ -168,6 +173,34 @@ export class PokerRepository {
     ).toArray()[0];
   }
 
+  ensureScore(agentId: string, initialScore: number, now: number): void {
+    this.storage.sql.exec(
+      `INSERT OR IGNORE INTO agent_scores
+       (agent_id, score, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+      agentId,
+      initialScore,
+      now,
+      now,
+    );
+  }
+
+  score(agentId: string): number | undefined {
+    return this.storage.sql.exec<ScoreRow>(
+      "SELECT score FROM agent_scores WHERE agent_id = ?",
+      agentId,
+    ).toArray()[0]?.score;
+  }
+
+  addScore(agentId: string, delta: number, initialScore: number, now: number): void {
+    this.ensureScore(agentId, initialScore, now);
+    this.storage.sql.exec(
+      "UPDATE agent_scores SET score = score + ?, updated_at = ? WHERE agent_id = ?",
+      delta,
+      now,
+      agentId,
+    );
+  }
+
   loadState(): { state: GameState; version: number } {
     const row = this.storage.sql.exec<StateRow>(
       "SELECT state_json, state_version FROM room_state WHERE id = 1",
@@ -175,6 +208,7 @@ export class PokerRepository {
     const state = JSON.parse(row.state_json) as GameState;
     state.waitingPlayers ??= [];
     state.resumeAt ??= 0;
+    for (const player of state.players) player.leaving ??= false;
     return { state, version: row.state_version };
   }
 

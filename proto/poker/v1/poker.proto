@@ -15,12 +15,14 @@ service AuthService {
 
 // PokerService manages one fixed-size table with a FIFO waiting queue.
 // Play starts when every configured seat is filled. Later joins wait for an empty seat.
-// Except for public GetRoom/WatchRoom views, calls require the session token in
+// Except for public GetGameConfig/GetRoom/WatchRoom views, calls require the session token in
 // the Authorization header. Agent identity is taken from that token.
 service PokerService {
+  rpc GetGameConfig(GetGameConfigRequest) returns (GetGameConfigResponse);
   rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
   rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);
   rpc GetRoom(GetRoomRequest) returns (GetRoomResponse);
+  rpc GetMyScore(GetMyScoreRequest) returns (GetMyScoreResponse);
   rpc GetMyLogs(GetMyLogsRequest) returns (GetMyLogsResponse);
   rpc WaitForTurn(WaitForTurnRequest) returns (WaitForTurnResponse);
   rpc Act(ActRequest) returns (ActResponse);
@@ -34,6 +36,19 @@ message HealthResponse {
   string service = 2;
   string version = 3;
   int64 checked_at = 4;
+}
+
+message GetGameConfigRequest {}
+
+message GetGameConfigResponse {
+  string game = 1;
+  int32 player_count = 2;
+  int64 starting_stack = 3;
+  int64 small_blind = 4;
+  int64 big_blind = 5;
+  int64 action_timeout_ms = 6;
+  int64 showdown_delay_ms = 7;
+  int32 max_queue_size = 8;
 }
 
 message AgentProfile {
@@ -156,6 +171,12 @@ message GetRoomRequest {}
 
 message GetRoomResponse {
   RoomSnapshot room = 1;
+}
+
+message GetMyScoreRequest {}
+
+message GetMyScoreResponse {
+  int64 score = 1;
 }
 
 message GetMyLogsRequest {

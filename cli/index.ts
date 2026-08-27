@@ -28,18 +28,24 @@ interface Session {
   expiresAt: number;
 }
 
+interface CliConfig {
+  server: string;
+}
+
 const help = `Usage: poker [options] <command>
 
 Commands:
+  config  Show the server's game and table parameters
   join
-  leave
+  leave  Fold immediately and leave after the hand
   status
+  score
   logs [--before <id>] [--limit <count>]
   wait [--after <seq>] [--timeout <ms>]
   act <fold|check|call|raise> --decision <id> [--to <amount>] [--reason <text>]
 
 Options:
-  -s, --server <url>  Server URL
+  -s, --server <url>  Server URL; the config command saves it
   --home <path>       Identity and session directory
   --name <name>       Display name for a new identity
   -h, --help          Show help
@@ -60,7 +66,7 @@ async function main(): Promise<void> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
     options: {
-      server: { type: "string", short: "s", default: process.env.POKER_SERVER_URL ?? "http://localhost:8787" },
+      server: { type: "string", short: "s" },
       home: { type: "string", default: process.env.POKER_HOME ?? join(homedir(), ".poker") },
       name: { type: "string", default: process.env.POKER_NAME },
       after: { type: "string", default: "0" },
@@ -81,23 +87,33 @@ async function main(): Promise<void> {
   const [command, actionName, ...extra] = positionals;
   if (extra.length > 0) throw new Error(`unexpected argument: ${extra[0]}`);
   if (command !== "act" && actionName) throw new Error(`unexpected argument: ${actionName}`);
-  if (!["join", "leave", "status", "logs", "wait", "act"].includes(command)) {
+  if (!["config", "join", "leave", "status", "score", "logs", "wait", "act"].includes(command)) {
     throw new Error(`unknown command: ${command}`);
   }
   if (command === "act" && !actionName) throw new Error("missing action");
   if (command === "act" && !values.decision) throw new Error("missing --decision <id>");
 
   const options: Options = {
-    server: values.server.replace(/\/$/, ""),
+    server: values.server
+      ? normalizeServer(values.server)
+      : process.env.POKER_SERVER_URL
+        ? normalizeServer(process.env.POKER_SERVER_URL)
+        : loadServerConfig() ?? "http://localhost:8787",
     home: values.home,
     name: values.name,
   };
   const client = createClient(PokerService, transport(options.server));
+  if (command === "config") {
+    const response = await client.getGameConfig({});
+    if (values.server) saveServerConfig(options.server);
+    return print(response);
+  }
   const headers = { authorization: `Bearer ${await authenticate(options)}` };
 
   if (command === "join") return print(await client.joinRoom({}, { headers }));
   if (command === "leave") return print(await client.leaveRoom({}, { headers }));
   if (command === "status") return print(await client.getRoom({}, { headers }));
+  if (command === "score") return print(await client.getMyScore({}, { headers }));
   if (command === "logs") {
     return print(await client.getMyLogs({
       beforeId: BigInt(values.before),
@@ -128,6 +144,44 @@ async function main(): Promise<void> {
 
 function transport(server: string) {
   return createConnectTransport({ baseUrl: server, httpVersion: "1.1" });
+}
+
+function configPath(): string {
+  return join(homedir(), ".pocker", "config.json");
+}
+
+function loadServerConfig(): string | undefined {
+  const path = configPath();
+  if (!existsSync(path)) return undefined;
+  let config: unknown;
+  try {
+    config = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    throw new Error(`invalid JSON in ${path}`);
+  }
+  if (!config || typeof config !== "object" || typeof (config as Partial<CliConfig>).server !== "string") {
+    throw new Error(`missing server in ${path}`);
+  }
+  return normalizeServer((config as CliConfig).server);
+}
+
+function saveServerConfig(server: string): void {
+  const path = configPath();
+  mkdirSync(join(homedir(), ".pocker"), { recursive: true, mode: 0o700 });
+  writePrivateJson(path, { server });
+}
+
+function normalizeServer(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`invalid server URL: ${value}`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("server URL must use http or https");
+  }
+  return url.toString().replace(/\/$/, "");
 }
 
 async function authenticate(options: Options): Promise<string> {

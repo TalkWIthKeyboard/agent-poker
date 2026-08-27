@@ -8,6 +8,7 @@ import {
 import {
   act as playAction,
   emptyGame,
+  leaveGame,
   legalActions,
   refillTable,
   shuffledDeck,
@@ -34,6 +35,7 @@ export interface EventData {
   message: string;
   createdAt: number;
   room: RoomData;
+  scoreDeltas?: Record<string, number>;
 }
 
 export class PokerMatch extends DurableObject<Env> {
@@ -122,6 +124,9 @@ export class PokerMatch extends DurableObject<Env> {
 
     const result = this.repository.transaction(() => {
       const { state, version } = this.repository.loadState();
+      const score = this.repository.score(agent.agent_id);
+      if (score === undefined) this.repository.ensureScore(agent.agent_id, GAME_CONFIG.startingStack, now);
+      else if (score <= 0) fail("FAILED_PRECONDITION", "score must be greater than zero to join");
       let events: GameEvent[] = [];
 
       // Recover pre-upgrade completed state before automatic seat refill ran.
@@ -165,6 +170,7 @@ export class PokerMatch extends DurableObject<Env> {
         folded: false,
         allIn: false,
         acted: false,
+        leaving: false,
       });
       events.push({
         kind: "PLAYER_JOINED",
@@ -191,6 +197,7 @@ export class PokerMatch extends DurableObject<Env> {
 
   async leaveRoom(token: string): Promise<RoomData> {
     const agent = await this.agentForToken(token);
+    const now = Date.now();
     const result = this.repository.transaction(() => {
       const { state, version } = this.repository.loadState();
       const queued = state.waitingPlayers.findIndex((candidate) => candidate.agentId === agent.agent_id);
@@ -202,9 +209,22 @@ export class PokerMatch extends DurableObject<Env> {
           message: `${agent.display_name} left the waiting queue.`,
         }], "LEAVE", undefined, { agentId: agent.agent_id });
       }
-      if (state.status !== "WAITING") fail("FAILED_PRECONDITION", "players cannot leave after the match starts");
       const player = state.players.find((candidate) => candidate.agentId === agent.agent_id);
       if (!player) fail("NOT_FOUND", "agent is not seated");
+      if (state.status === "PLAYING") {
+        const decisionId = state.decision?.seat === player.seat ? state.decision.id : undefined;
+        const left = leaveGame(state, agent.agent_id, now, crypto.randomUUID());
+        return left.events.length > 0
+          ? this.saveState(
+              left.state,
+              version,
+              left.events,
+              "LEAVE",
+              decisionId,
+              { agentId: agent.agent_id, action: "fold" },
+            )
+          : { state: left.state, events: [] as EventData[] };
+      }
       state.players = state.players.filter((candidate) => candidate.agentId !== agent.agent_id);
       return this.saveState(state, version, [{
         kind: "PLAYER_LEFT",
@@ -212,6 +232,7 @@ export class PokerMatch extends DurableObject<Env> {
         message: `${agent.display_name} left seat ${player.seat}.`,
       }], "LEAVE", undefined, { agentId: agent.agent_id });
     });
+    await this.scheduleAlarm(result.state);
     this.notifyWaiters();
     return roomView(result.state, agent.agent_id);
   }
@@ -219,6 +240,11 @@ export class PokerMatch extends DurableObject<Env> {
   async getRoom(token?: string): Promise<RoomData> {
     const agent = token ? await this.agentForToken(token) : undefined;
     return roomView(this.repository.loadState().state, agent?.agent_id);
+  }
+
+  async getMyScore(token: string): Promise<number> {
+    const agent = await this.agentForToken(token);
+    return this.repository.score(agent.agent_id) ?? 0;
   }
 
   async getMyLogs(token: string, beforeId: number, limit: number): Promise<ParticipationLogData[]> {
@@ -320,8 +346,7 @@ export class PokerMatch extends DurableObject<Env> {
       if (!state.decision || state.decision.deadline > now) return undefined;
       const decisionId = state.decision.id;
       const acting = state.players.find((player) => player.seat === state.decision?.seat)!;
-      const legal = legalActions(state, state.decision.seat);
-      const action: GameAction = legal.actions.includes("check") ? "check" : "fold";
+      const action = "fold" as const;
       const played = playAction(state, decisionId, action, 0, now, crypto.randomUUID(), true);
       return this.saveState(
         played.state,
@@ -358,6 +383,11 @@ export class PokerMatch extends DurableObject<Env> {
     const now = Date.now();
     const events: EventData[] = [];
     for (const draft of drafts) {
+      for (const [agentId, delta] of Object.entries(draft.scoreDeltas ?? {})) {
+        this.repository.addScore(agentId, delta, GAME_CONFIG.startingStack, now);
+      }
+    }
+    for (const draft of drafts) {
       state.eventSeq += 1;
       const room = roomView(state);
       const event: EventData = {
@@ -368,6 +398,7 @@ export class PokerMatch extends DurableObject<Env> {
         message: draft.message,
         createdAt: now,
         room,
+        scoreDeltas: draft.scoreDeltas,
       };
       events.push(event);
     }
@@ -413,7 +444,7 @@ export class PokerMatch extends DurableObject<Env> {
 
 function roomView(state: GameState, viewerAgentId?: string) {
   const decisionPlayer = state.players.find((player) => player.seat === state.decision?.seat);
-  const viewer = state.players.find((player) => player.agentId === viewerAgentId);
+  const viewer = state.players.find((player) => player.agentId === viewerAgentId && !player.leaving);
   const viewerCanAct = viewer && state.decision?.seat === viewer.seat;
   const legal = viewerCanAct ? legalActions(state, viewer.seat) : undefined;
   return {

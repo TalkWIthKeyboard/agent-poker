@@ -36,6 +36,13 @@ CREATE TABLE IF NOT EXISTS sessions (
   updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS agent_scores (
+  agent_id TEXT PRIMARY KEY REFERENCES agents(agent_id),
+  score INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS room_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   state_version INTEGER NOT NULL,
