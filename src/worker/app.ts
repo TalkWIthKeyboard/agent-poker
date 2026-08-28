@@ -1,5 +1,7 @@
+import { Code, ConnectError } from "@connectrpc/connect";
 import { stringifyCardCode } from "@pokertools/evaluator";
 import { DurableObject } from "cloudflare:workers";
+import { timingSafeEqual } from "node:crypto";
 import {
   ActionType,
   RoomStatus,
@@ -124,9 +126,11 @@ export class PokerMatch extends DurableObject<Env> {
 
     const result = this.repository.transaction(() => {
       const { state, version } = this.repository.loadState();
+      if (state.paused) fail("UNAVAILABLE", "room is paused");
       const score = this.repository.score(agent.agent_id);
       if (score === undefined) this.repository.ensureScore(agent.agent_id, GAME_CONFIG.startingStack, now);
       else if (score <= 0) fail("FAILED_PRECONDITION", "score must be greater than zero to join");
+      const entryStack = score ?? GAME_CONFIG.startingStack;
       let events: GameEvent[] = [];
 
       // Recover pre-upgrade completed state before automatic seat refill ran.
@@ -148,7 +152,11 @@ export class PokerMatch extends DurableObject<Env> {
         if (state.waitingPlayers.length >= GAME_CONFIG.maxQueueSize) {
           fail("RESOURCE_EXHAUSTED", "waiting queue is full");
         }
-        state.waitingPlayers.push({ agentId: agent.agent_id, displayName: agent.display_name });
+        state.waitingPlayers.push({
+          agentId: agent.agent_id,
+          displayName: agent.display_name,
+          stack: entryStack,
+        });
         events.push({
           kind: "PLAYER_QUEUED",
           agentId: agent.agent_id,
@@ -163,7 +171,7 @@ export class PokerMatch extends DurableObject<Env> {
         agentId: agent.agent_id,
         displayName: agent.display_name,
         seat,
-        stack: GAME_CONFIG.startingStack,
+        stack: entryStack,
         streetBet: 0,
         totalBet: 0,
         hole: [],
@@ -192,7 +200,7 @@ export class PokerMatch extends DurableObject<Env> {
 
     await this.scheduleAlarm(result.state);
     if (result.events.length > 0) this.notifyWaiters();
-    return roomView(result.state, agent.agent_id);
+    return this.roomView(result.state, agent.agent_id);
   }
 
   async leaveRoom(token: string): Promise<RoomData> {
@@ -234,16 +242,26 @@ export class PokerMatch extends DurableObject<Env> {
     });
     await this.scheduleAlarm(result.state);
     this.notifyWaiters();
-    return roomView(result.state, agent.agent_id);
+    return this.roomView(result.state, agent.agent_id);
   }
 
-  async getRoom(token?: string): Promise<{ room: RoomData; events: EventData[] }> {
+  async getRoom(token?: string, omitEvents = false): Promise<{ room: RoomData; events: EventData[] }> {
     const agent = token ? await this.agentForToken(token) : undefined;
     const state = this.repository.loadState().state;
     return {
-      room: roomView(state, agent?.agent_id),
-      events: this.repository.eventsForHand(state.handNumber),
+      room: this.roomView(state, agent?.agent_id),
+      events: omitEvents ? [] : this.repository.eventsForHand(state.handNumber),
     };
+  }
+
+  listRoomEvents(before: number, limit: number): { events: EventData[]; hasMore: boolean } {
+    if (!Number.isSafeInteger(before) || before < 0) {
+      fail("INVALID_ARGUMENT", "before_event_seq must be a non-negative safe integer");
+    }
+    if (!Number.isInteger(limit) || limit < 0 || limit > 100) {
+      fail("INVALID_ARGUMENT", "limit must be between 0 and 100");
+    }
+    return this.repository.eventPage(before, limit || 20);
   }
 
   async getMyScore(token: string): Promise<number> {
@@ -278,9 +296,37 @@ export class PokerMatch extends DurableObject<Env> {
     return {
       yourTurn: state.decision?.seat === seatFor(state, agent.agent_id),
       changed: events.length > 0,
-      room: roomView(state, agent.agent_id),
+      room: this.roomView(state, agent.agent_id),
       events,
     };
+  }
+
+  async sendChat(token: string, text: string): Promise<EventData> {
+    const agent = await this.agentForToken(token);
+    const message = text.trim();
+    if (message.length === 0 || [...message].length > 280) {
+      fail("INVALID_ARGUMENT", "chat message must contain 1 to 280 characters");
+    }
+    const now = Date.now();
+    const result = this.repository.transaction(() => {
+      const { state, version } = this.repository.loadState();
+      if (state.paused) fail("UNAVAILABLE", "room is paused");
+      const player = state.players.find((candidate) => (
+        candidate.agentId === agent.agent_id && !candidate.leaving
+      ));
+      if (!player) fail("FAILED_PRECONDITION", "only seated players can chat");
+      const lastChatAt = this.repository.lastChatAt(agent.agent_id);
+      if (lastChatAt !== undefined && now - lastChatAt < 10_000) {
+        fail("RESOURCE_EXHAUSTED", "wait 10 seconds between chat messages");
+      }
+      return this.saveState(state, version, [{
+        kind: "CHAT_MESSAGE",
+        agentId: agent.agent_id,
+        message: `${player.displayName}: ${message}`,
+      }]);
+    });
+    this.notifyWaiters();
+    return result.events[0];
   }
 
   async act(
@@ -321,7 +367,7 @@ export class PokerMatch extends DurableObject<Env> {
     await this.scheduleAlarm(result.state);
     this.notifyWaiters();
     const accepted = result.events.find((event) => event.kind === "ACTION") ?? result.events[0];
-    return { room: roomView(result.state, agent.agent_id), event: accepted };
+    return { room: this.roomView(result.state, agent.agent_id), event: accepted };
   }
 
   async waitForEvents(after: number, timeoutMs: number): Promise<EventData[]> {
@@ -333,10 +379,36 @@ export class PokerMatch extends DurableObject<Env> {
     return events;
   }
 
+  async setRoomPaused(paused: boolean): Promise<RoomData> {
+    const result = this.repository.transaction(() => {
+      const { state: current, version } = this.repository.loadState();
+      if (current.paused === paused) return { state: current, events: [] as EventData[] };
+      const state = paused
+        ? {
+            ...emptyGame(),
+            matchId: current.matchId,
+            handNumber: current.handNumber,
+            dealerSeat: current.dealerSeat,
+            eventSeq: current.eventSeq,
+            paused: true,
+          }
+        : { ...current, paused: false };
+      return this.saveState(state, version, [{
+        kind: paused ? "ROOM_PAUSED" : "ROOM_RESUMED",
+        message: paused ? "The room was paused." : "The room resumed.",
+      }], paused ? "ROOM_PAUSED" : "ROOM_RESUMED");
+    });
+    if (paused) await this.ctx.storage.deleteAlarm();
+    else await this.scheduleAlarm(result.state);
+    if (result.events.length > 0) this.notifyWaiters();
+    return this.roomView(result.state);
+  }
+
   async alarm(): Promise<void> {
     const now = Date.now();
     const result = this.repository.transaction(() => {
       const { state, version } = this.repository.loadState();
+      if (state.paused) return undefined;
 
       if (state.resumeAt > 0 && state.resumeAt <= now) {
         const refilled = refillTable(state);
@@ -383,7 +455,7 @@ export class PokerMatch extends DurableObject<Env> {
     state: GameState,
     expectedVersion: number,
     drafts: GameEvent[],
-    privateKind: string,
+    privateKind?: string,
     decisionId?: string,
     privatePayload: object = {},
   ): { state: GameState; events: EventData[] } {
@@ -396,7 +468,7 @@ export class PokerMatch extends DurableObject<Env> {
     }
     for (const draft of drafts) {
       state.eventSeq += 1;
-      const room = roomView(state);
+      const room = this.roomView(state);
       const event: EventData = {
         seq: state.eventSeq,
         handNumber: state.handNumber,
@@ -425,6 +497,14 @@ export class PokerMatch extends DurableObject<Env> {
     return this.repository.eventsAfter(after);
   }
 
+  private roomView(state: GameState, viewerAgentId?: string): RoomData {
+    const scores = new Map(state.players.map((player) => [
+      player.agentId,
+      this.repository.score(player.agentId) ?? 0,
+    ]));
+    return roomView(state, scores, viewerAgentId);
+  }
+
   private async scheduleAlarm(state: GameState): Promise<void> {
     const scheduledAt = state.decision?.deadline ?? state.resumeAt;
     if (scheduledAt > 0) await this.ctx.storage.setAlarm(scheduledAt);
@@ -449,7 +529,7 @@ export class PokerMatch extends DurableObject<Env> {
   }
 }
 
-function roomView(state: GameState, viewerAgentId?: string) {
+function roomView(state: GameState, scores: ReadonlyMap<string, number>, viewerAgentId?: string) {
   const decisionPlayer = state.players.find((player) => player.seat === state.decision?.seat);
   const viewer = state.players.find((player) => player.agentId === viewerAgentId && !player.leaving);
   const viewerCanAct = viewer && state.decision?.seat === viewer.seat;
@@ -488,6 +568,7 @@ function roomView(state: GameState, viewerAgentId?: string) {
       folded: player.folded && player.stack > 0,
       allIn: player.allIn,
       revealedCards: (state.lastRevealed[player.agentId] ?? []).map(cardData),
+      lifetimeScore: scores.get(player.agentId) ?? 0,
     })),
     legalActions: legal && {
       actions: legal.actions.map(actionType),
@@ -502,6 +583,7 @@ function roomView(state: GameState, viewerAgentId?: string) {
     viewerQueuePosition: viewerAgentId
       ? state.waitingPlayers.findIndex((player) => player.agentId === viewerAgentId) + 1
       : 0,
+    paused: state.paused,
   };
 }
 
@@ -550,4 +632,17 @@ async function hashText(value: string): Promise<string> {
 
 function fail(code: string, message: string): never {
   throw new Error(`${code}: ${message}`);
+}
+
+export function requireAdmin(headers: Headers, expected?: string): void {
+  if (!expected) throw new ConnectError("Admin operations are unavailable", Code.Unavailable);
+  const authorization = headers.get("authorization");
+  if (!authorization?.startsWith("Bearer ")) {
+    throw new ConnectError("Missing admin token", Code.Unauthenticated);
+  }
+  const provided = new TextEncoder().encode(authorization.slice(7));
+  const secret = new TextEncoder().encode(expected);
+  if (provided.byteLength !== secret.byteLength || !timingSafeEqual(provided, secret)) {
+    throw new ConnectError("Invalid admin token", Code.PermissionDenied);
+  }
 }

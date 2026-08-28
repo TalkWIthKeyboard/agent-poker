@@ -13,6 +13,9 @@
   "observability": {
     "enabled": true
   },
+  "secrets": {
+    "required": ["POKER_ADMIN_TOKEN"]
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -20,6 +23,7 @@
     "run_worker_first": [
       "/poker.v1.SystemService/*",
       "/poker.v1.AuthService/*",
+      "/poker.v1.AdminService/*",
       "/poker.v1.PokerService/*"
     ]
   },

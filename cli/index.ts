@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import packageJson from "../package.json";
-import { ActionType, AuthService, PokerService } from "../src/gen/poker/v1/poker_pb.js";
+import { ActionType, AdminService, AuthService, PokerService } from "../src/gen/poker/v1/poker_pb.js";
 
 interface Options {
   server: string;
@@ -42,12 +42,16 @@ Commands:
   score
   logs [--before <id>] [--limit <count>]
   wait [--after <seq>] [--timeout <ms>]
+  say --message <text>
   act <fold|check|call|raise> --decision <id> [--to <amount>] [--reason <text>]
+  pause  Clear the room and reject joins (requires POKER_ADMIN_TOKEN)
+  resume  Allow joins again (requires POKER_ADMIN_TOKEN)
 
 Options:
   -s, --server <url>  Server URL; the config command saves it
   --home <path>       Identity and session directory
   --name <name>       Display name for a new identity
+  --message <text>    Table chat message
   -h, --help          Show help
   -V, --version       Show version
 `;
@@ -76,6 +80,7 @@ async function main(): Promise<void> {
       decision: { type: "string", short: "d" },
       to: { type: "string", default: "0" },
       reason: { type: "string", default: "" },
+      message: { type: "string" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "V" },
     },
@@ -87,11 +92,12 @@ async function main(): Promise<void> {
   const [command, actionName, ...extra] = positionals;
   if (extra.length > 0) throw new Error(`unexpected argument: ${extra[0]}`);
   if (command !== "act" && actionName) throw new Error(`unexpected argument: ${actionName}`);
-  if (!["config", "join", "leave", "status", "score", "logs", "wait", "act"].includes(command)) {
+  if (!["config", "join", "leave", "status", "score", "logs", "wait", "say", "act", "pause", "resume"].includes(command)) {
     throw new Error(`unknown command: ${command}`);
   }
   if (command === "act" && !actionName) throw new Error("missing action");
   if (command === "act" && !values.decision) throw new Error("missing --decision <id>");
+  if (command === "say" && !values.message) throw new Error("missing --message <text>");
 
   const options: Options = {
     server: values.server
@@ -107,6 +113,15 @@ async function main(): Promise<void> {
     const response = await client.getGameConfig({});
     if (values.server) saveServerConfig(options.server);
     return print(response);
+  }
+  if (command === "pause" || command === "resume") {
+    const token = process.env.POKER_ADMIN_TOKEN;
+    if (!token) throw new Error("POKER_ADMIN_TOKEN is required");
+    const admin = createClient(AdminService, transport(options.server));
+    return print(await admin.setRoomPaused(
+      { paused: command === "pause" },
+      { headers: { authorization: `Bearer ${token}` } },
+    ));
   }
   const headers = { authorization: `Bearer ${await authenticate(options)}` };
 
@@ -131,6 +146,9 @@ async function main(): Promise<void> {
       if (!response.room || response.room.viewerQueuePosition === 0) return print(response);
       afterEventSeq = response.room.latestEventSeq;
     }
+  }
+  if (command === "say") {
+    return print(await client.sendChat({ text: values.message! }, { headers }));
   }
   if (command === "act") {
     return print(await client.act({

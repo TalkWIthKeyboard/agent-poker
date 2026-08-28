@@ -1,6 +1,6 @@
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   PokerService,
@@ -13,6 +13,8 @@ import {
 import { playerDisplayState, playerStateLabel } from "./player-state.js";
 import "./styles.css";
 
+const EVENT_PAGE_SIZE = 20;
+
 function App() {
   const client = useMemo(() => createClient(
     PokerService,
@@ -20,8 +22,12 @@ function App() {
   ), []);
   const [room, setRoom] = useState<RoomSnapshot>();
   const [events, setEvents] = useState<RoomEvent[]>([]);
+  const [hasMoreEvents, setHasMoreEvents] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [connection, setConnection] = useState("connecting");
   const [now, setNow] = useState(Date.now());
+  const activityRef = useRef<HTMLOListElement>(null);
+  const loadMoreRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -30,12 +36,20 @@ function App() {
 
   useEffect(() => {
     const controller = new AbortController();
-    let after = 0n;
+    let after: bigint;
 
     async function watch() {
-      const initial = await client.getRoom({}, { signal: controller.signal });
-      const latestAtLoad = initial.room?.latestEventSeq ?? 0n;
-      setRoom(initial.room);
+      const [initial, activity] = await Promise.all([
+        client.getRoom({ omitEvents: true }, { signal: controller.signal }),
+        client.listRoomEvents({ limit: EVENT_PAGE_SIZE }, { signal: controller.signal }),
+      ]);
+      const newest = activity.events.at(-1);
+      after = newest?.seq ?? initial.room?.latestEventSeq ?? 0n;
+      setRoom(newest?.seq && newest.seq > (initial.room?.latestEventSeq ?? 0n)
+        ? newest.room
+        : initial.room);
+      setEvents(activity.events);
+      setHasMoreEvents(activity.hasMore);
 
       while (!controller.signal.aborted) {
         try {
@@ -46,8 +60,8 @@ function App() {
           )) {
             if (!response.event) continue;
             after = response.event.seq;
-            if (response.event.seq >= latestAtLoad) setRoom(response.event.room);
-            setEvents((current) => [...current, response.event!].slice(-40));
+            setRoom(response.event.room);
+            setEvents((current) => mergeEvents(current, [response.event!]));
           }
         } catch (cause) {
           if (controller.signal.aborted) return;
@@ -65,7 +79,46 @@ function App() {
     return () => controller.abort();
   }, [client]);
 
+  const oldestEventSeq = events[0]?.seq;
+
+  async function loadMoreEvents() {
+    const before = oldestEventSeq;
+    if (!before || loadingMore || !hasMoreEvents) return;
+    setLoadingMore(true);
+    try {
+      const page = await client.listRoomEvents({
+        beforeEventSeq: before,
+        limit: EVENT_PAGE_SIZE,
+      });
+      setEvents((current) => mergeEvents(page.events, current));
+      setHasMoreEvents(page.hasMore);
+    } catch (cause) {
+      setConnection(cause instanceof Error ? cause.message : "could not load activity");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  useEffect(() => {
+    const root = activityRef.current;
+    const target = loadMoreRef.current;
+    if (!root || !target || loadingMore || !hasMoreEvents) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) void loadMoreEvents();
+    }, { root, rootMargin: "0px 0px 120px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [oldestEventSeq, hasMoreEvents, loadingMore]);
+
   const players = room?.players ?? [];
+  const playerNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const event of events) {
+      for (const player of event.room?.players ?? []) names.set(player.agentId, player.displayName);
+    }
+    for (const player of players) names.set(player.agentId, player.displayName);
+    return names;
+  }, [events, players]);
   return (
     <main>
       <header>
@@ -80,10 +133,8 @@ function App() {
       </header>
 
       <section className="summary">
-        <div><span>Status</span><strong>{statusName(room?.status)}</strong></div>
         <div><span>Hand</span><strong>#{room?.handNumber || "—"}</strong></div>
         <div><span>Street</span><strong>{streetName(room?.street)}</strong></div>
-        <div><span>Pot</span><strong>{room?.pot.toString() ?? "0"}</strong></div>
         <div><span>Queue</span><strong>{room?.queueSize ?? 0}</strong></div>
       </section>
 
@@ -96,19 +147,33 @@ function App() {
             : undefined;
           const eliminated = displayState === "eliminated";
           const folded = displayState === "folded";
+          const revealed = room?.street === Street.SHOWDOWN
+            && (player?.revealedCards.length ?? 0) > 0;
+          const hidden = room?.status === RoomStatus.PLAYING
+            && player !== undefined
+            && !folded
+            && !eliminated
+            && !revealed;
           return (
             <article
               key={seat}
+              data-seat={seat}
               className={`seat ${acting ? "acting" : ""} ${folded ? "folded" : ""} ${eliminated ? "eliminated" : ""}`}
               style={seatPosition(seat, room!.capacity)}
             >
               <div className="seat-number">SEAT {seat + 1}</div>
               {player ? (
                 <>
+                  {player.totalBet > 0n && (
+                    <div role="img" className="total-bet" aria-label={`Total bet ${player.totalBet.toString()}`}>
+                      <span className="poker-chip" aria-hidden="true" />
+                      <strong>{player.totalBet.toString()}</strong>
+                    </div>
+                  )}
                   {folded && <span className="fold-badge">FOLDED</span>}
                   {eliminated && <span className="eliminated-badge">ELIMINATED</span>}
                   {acting && room!.decisionDeadline > 0n && (
-                    <span className="turn-timer" aria-label="Time remaining">
+                    <span role="timer" className="turn-timer" aria-label="Time remaining">
                       {Math.max(0, Math.ceil((Number(room!.decisionDeadline) - now) / 1_000))}s
                     </span>
                   )}
@@ -118,9 +183,21 @@ function App() {
                     {playerStateLabel(displayState!)}
                   </p>
                   {player.streetBet > 0n && <span className="bet">Bet {player.streetBet.toString()}</span>}
-                  {room?.street === Street.SHOWDOWN && player.revealedCards.length > 0 && (
-                    <div className="hole-cards" aria-label={`${player.displayName}'s revealed cards`}>
-                      {player.revealedCards.map(cardView)}
+                  {(revealed || hidden) && (
+                    <div role="img" className={`hole-cards ${hidden ? "hidden-cards" : ""}`} aria-label={
+                      hidden
+                        ? `${player.displayName} has two hidden cards`
+                        : `${player.displayName}'s revealed cards`
+                    }>
+                      {hidden
+                        ? [0, 1].map((index) => (
+                            <span
+                              aria-hidden="true"
+                              className="card back"
+                              key={`${room!.handNumber}-${index}`}
+                            >◆</span>
+                          ))
+                        : player.revealedCards.map(cardView)}
                     </div>
                   )}
                 </>
@@ -145,20 +222,36 @@ function App() {
         <div className="feed-title">
           <h2>Table activity</h2>
         </div>
-        <ol>
+        <ol aria-label="Table activity events" ref={activityRef} tabIndex={0}>
           {events.length === 0 && <li className="quiet">Waiting for agents to join…</li>}
-          {[...events].reverse().map((event) => (
-            <li key={event.seq.toString()}>
-              <small>
-                TURN #{event.seq.toString()} · HAND #{event.handNumber} · {streetName(event.room?.street)}
-              </small>
-              <span>{event.message}</span>
+          {[...events].reverse().map((event) => {
+            const actor = event.agentId ? playerNames.get(event.agentId) ?? "PLAYER" : "🃏 GAME ADMIN";
+            const prefix = `${actor}${event.kind === "CHAT_MESSAGE" ? ":" : ""} `;
+            const actorlessMessage = event.message.startsWith(prefix)
+              ? event.message.slice(prefix.length)
+              : event.message;
+            const message = actorlessMessage.replace(new RegExp(`^Hand ${event.handNumber}:? `), "");
+            return (
+              <li className={event.kind === "CHAT_MESSAGE" ? "chat-message" : ""} key={event.seq.toString()}>
+                <small>{`${actor} · HAND #${event.handNumber} · ${streetName(event.room?.street)}`}</small>
+                <span>{message}</span>
+              </li>
+            );
+          })}
+          {hasMoreEvents && (
+            <li aria-live="polite" className="load-more-row" ref={loadMoreRef}>
+              {loadingMore ? "Loading earlier activity…" : ""}
             </li>
-          ))}
+          )}
         </ol>
       </section>
     </main>
   );
+}
+
+function mergeEvents(first: RoomEvent[], second: RoomEvent[]): RoomEvent[] {
+  const events = new Map([...first, ...second].map((event) => [event.seq, event]));
+  return [...events.values()].sort((left, right) => left.seq < right.seq ? -1 : left.seq > right.seq ? 1 : 0);
 }
 
 function cardView(card: Card, index: number) {
@@ -180,18 +273,12 @@ function seatPosition(seat: number, capacity: number): React.CSSProperties {
   };
 }
 
-function statusName(status?: RoomStatus): string {
-  if (status === RoomStatus.WAITING_FOR_PLAYERS) return "WAITING";
-  if (status === RoomStatus.PLAYING) return "PLAYING";
-  if (status === RoomStatus.COMPLETE) return "COMPLETE";
-  return "LOADING";
-}
-
 function streetName(street?: Street): string {
   return street === undefined || street === Street.UNSPECIFIED ? "—" : Street[street];
 }
 
 function tableMessage(room?: RoomSnapshot): string {
+  if (room?.paused) return "Room paused for maintenance";
   if (!room || room.status === RoomStatus.WAITING_FOR_PLAYERS) {
     return `Waiting for ${room?.capacity ?? "—"} agents`;
   }

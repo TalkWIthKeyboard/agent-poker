@@ -13,6 +13,12 @@ service AuthService {
   rpc FinishAuth(FinishAuthRequest) returns (FinishAuthResponse);
 }
 
+// AdminService controls maintenance mode. Calls require the POKER_ADMIN_TOKEN
+// secret in the Authorization header.
+service AdminService {
+  rpc SetRoomPaused(SetRoomPausedRequest) returns (SetRoomPausedResponse);
+}
+
 // PokerService manages one fixed-size table with a FIFO waiting queue.
 // Play starts when every configured seat is filled. Later joins wait for an empty seat.
 // Except for public GetGameConfig/GetRoom/WatchRoom views, calls require the session token in
@@ -22,9 +28,11 @@ service PokerService {
   rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
   rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);
   rpc GetRoom(GetRoomRequest) returns (GetRoomResponse);
+  rpc ListRoomEvents(ListRoomEventsRequest) returns (ListRoomEventsResponse);
   rpc GetMyScore(GetMyScoreRequest) returns (GetMyScoreResponse);
   rpc GetMyLogs(GetMyLogsRequest) returns (GetMyLogsResponse);
   rpc WaitForTurn(WaitForTurnRequest) returns (WaitForTurnResponse);
+  rpc SendChat(SendChatRequest) returns (SendChatResponse);
   rpc Act(ActRequest) returns (ActResponse);
   rpc WatchRoom(WatchRoomRequest) returns (stream WatchRoomResponse);
 }
@@ -122,6 +130,7 @@ message PlayerView {
   bool folded = 7;
   bool all_in = 8;
   repeated Card revealed_cards = 9;
+  int64 lifetime_score = 10;
 }
 
 message LegalActions {
@@ -153,6 +162,15 @@ message RoomSnapshot {
   bool viewer_seated = 19;
   // One-based FIFO position. Zero means the viewer is not queued.
   int32 viewer_queue_position = 20;
+  bool paused = 21;
+}
+
+message SetRoomPausedRequest {
+  bool paused = 1;
+}
+
+message SetRoomPausedResponse {
+  RoomSnapshot room = 1;
 }
 
 message JoinRoomRequest {}
@@ -167,12 +185,28 @@ message LeaveRoomResponse {
   RoomSnapshot room = 1;
 }
 
-message GetRoomRequest {}
+message GetRoomRequest {
+  // Web spectators use ListRoomEvents for pagination instead.
+  bool omit_events = 1;
+}
 
 message GetRoomResponse {
   RoomSnapshot room = 1;
   // Complete public event history for the current hand.
   repeated RoomEvent events = 2;
+}
+
+message ListRoomEventsRequest {
+  // Return events older than this sequence. Zero starts from the newest event.
+  int64 before_event_seq = 1;
+  // Zero uses the default of 20. Maximum 100.
+  int32 limit = 2;
+}
+
+message ListRoomEventsResponse {
+  // Ordered from oldest to newest within this page.
+  repeated RoomEvent events = 1;
+  bool has_more = 2;
 }
 
 message GetMyScoreRequest {}
@@ -214,6 +248,14 @@ message WaitForTurnResponse {
   RoomSnapshot room = 3;
   // Public table events after after_event_seq, ordered by sequence number.
   repeated RoomEvent events = 4;
+}
+
+message SendChatRequest {
+  string text = 1;
+}
+
+message SendChatResponse {
+  RoomEvent accepted_event = 1;
 }
 
 message ActRequest {

@@ -208,6 +208,7 @@ export class PokerRepository {
     const state = JSON.parse(row.state_json) as GameState;
     state.waitingPlayers ??= [];
     state.resumeAt ??= 0;
+    state.paused ??= false;
     for (const player of state.players) player.leaving ??= false;
     return { state, version: row.state_version };
   }
@@ -216,42 +217,44 @@ export class PokerRepository {
     state: GameState;
     expectedVersion: number;
     events: EventData[];
-    privateKind: string;
+    privateKind?: string;
     decisionId?: string;
     privatePayload: object;
     now: number;
   }): void {
     const { state } = input;
-    this.storage.sql.exec(
-      `INSERT INTO game_events
-       (public_seq, decision_id, event_json, created_at, updated_at)
-       VALUES (NULL, ?, ?, ?, ?)`,
-      input.decisionId ?? null,
-      JSON.stringify({
-        kind: input.privateKind,
-        decisionId: input.decisionId,
-        ...input.privatePayload,
-        state,
-      }),
-      input.now,
-      input.now,
-    );
-
-    if (state.decision) {
+    if (input.privateKind) {
       this.storage.sql.exec(
         `INSERT INTO game_events
          (public_seq, decision_id, event_json, created_at, updated_at)
-         VALUES (NULL, NULL, ?, ?, ?)`,
+         VALUES (NULL, ?, ?, ?, ?)`,
+        input.decisionId ?? null,
         JSON.stringify({
-          kind: "DECISION_OPENED",
-          decisionId: state.decision.id,
-          agentId: state.players.find((player) => player.seat === state.decision?.seat)?.agentId,
-          handNumber: state.handNumber,
-          decision: state.decision,
+          kind: input.privateKind,
+          decisionId: input.decisionId,
+          ...input.privatePayload,
+          state,
         }),
         input.now,
         input.now,
       );
+
+      if (state.decision) {
+        this.storage.sql.exec(
+          `INSERT INTO game_events
+           (public_seq, decision_id, event_json, created_at, updated_at)
+           VALUES (NULL, NULL, ?, ?, ?)`,
+          JSON.stringify({
+            kind: "DECISION_OPENED",
+            decisionId: state.decision.id,
+            agentId: state.players.find((player) => player.seat === state.decision?.seat)?.agentId,
+            handNumber: state.handNumber,
+            decision: state.decision,
+          }),
+          input.now,
+          input.now,
+        );
+      }
     }
 
     for (const event of input.events) {
@@ -293,6 +296,34 @@ export class PokerRepository {
        ORDER BY public_seq`,
       handNumber,
     ).toArray().map((row) => JSON.parse(row.event_json) as EventData);
+  }
+
+  eventPage(before: number, limit: number): { events: EventData[]; hasMore: boolean } {
+    const rows = this.storage.sql.exec<{ event_json: string }>(
+      `SELECT event_json FROM game_events
+       WHERE public_seq IS NOT NULL AND (? = 0 OR public_seq < ?)
+       ORDER BY public_seq DESC LIMIT ?`,
+      before,
+      before,
+      limit + 1,
+    ).toArray();
+    const hasMore = rows.length > limit;
+    if (hasMore) rows.pop();
+    return {
+      events: rows.reverse().map((row) => JSON.parse(row.event_json) as EventData),
+      hasMore,
+    };
+  }
+
+  lastChatAt(agentId: string): number | undefined {
+    return this.storage.sql.exec<{ created_at: number }>(
+      `SELECT created_at FROM game_events
+       WHERE public_seq IS NOT NULL
+         AND json_extract(event_json, '$.kind') = 'CHAT_MESSAGE'
+         AND json_extract(event_json, '$.agentId') = ?
+       ORDER BY public_seq DESC LIMIT 1`,
+      agentId,
+    ).toArray()[0]?.created_at;
   }
 
   participationLogs(agentId: string, beforeId: number, limit: number): ParticipationLogData[] {

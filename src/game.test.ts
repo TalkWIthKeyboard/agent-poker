@@ -46,7 +46,7 @@ describe("poker game", () => {
   it("removes busted players and fills their seats from the queue in FIFO order", () => {
     let state = startMatch(players, winningDeck(), 1_000, "match-1", "decision-1").state;
     state.waitingPlayers = [
-      { agentId: "queued-1", displayName: "Queued 1" },
+      { agentId: "queued-1", displayName: "Queued 1", stack: 750 },
       { agentId: "queued-2", displayName: "Queued 2" },
       { agentId: "queued-3", displayName: "Queued 3" },
     ];
@@ -64,7 +64,7 @@ describe("poker game", () => {
     expect(refilled.state.players.find((player) => player.agentId === survivor.agentId)?.stack).toBe(totalChips);
     expect(refilled.state.players.filter((player) => player.agentId.startsWith("queued-")))
       .toEqual(expect.arrayContaining([
-        expect.objectContaining({ agentId: "queued-1", stack: GAME_CONFIG.startingStack }),
+        expect.objectContaining({ agentId: "queued-1", stack: 750 }),
         expect.objectContaining({ agentId: "queued-2", stack: GAME_CONFIG.startingStack }),
         expect.objectContaining({ agentId: "queued-3", stack: GAME_CONFIG.startingStack }),
       ]));

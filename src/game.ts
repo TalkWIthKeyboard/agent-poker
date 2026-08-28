@@ -28,6 +28,7 @@ export interface Decision {
 export interface WaitingPlayer {
   agentId: string;
   displayName: string;
+  stack?: number;
 }
 
 export interface GameState {
@@ -49,6 +50,7 @@ export interface GameState {
   eventSeq: number;
   result: string;
   lastRevealed: Record<string, number[]>;
+  paused: boolean;
 }
 
 export interface GameEvent {
@@ -85,6 +87,7 @@ export function emptyGame(): GameState {
     eventSeq: 0,
     result: "",
     lastRevealed: {},
+    paused: false,
   };
 }
 
@@ -100,7 +103,7 @@ export function shuffledDeck(): number[] {
 }
 
 export function startMatch(
-  seatedPlayers: Array<Pick<GamePlayer, "agentId" | "displayName" | "seat">>,
+  seatedPlayers: Array<WaitingPlayer & Pick<GamePlayer, "seat">>,
   deck: number[],
   now: number,
   matchId: string,
@@ -484,7 +487,7 @@ function newPlayer(player: WaitingPlayer, seat: number): GamePlayer {
   return {
     ...player,
     seat,
-    stack: GAME_CONFIG.startingStack,
+    stack: player.stack ?? GAME_CONFIG.startingStack,
     streetBet: 0,
     totalBet: 0,
     hole: [],

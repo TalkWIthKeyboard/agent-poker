@@ -10,15 +10,17 @@ import packageJson from "../../package.json";
 import { GAME_CONFIG } from "../config.js";
 import {
   ActionType,
+  AdminService,
   AuthService,
   PokerService,
   SystemService,
 } from "../gen/poker/v1/poker_pb.js";
-import type { EventData, PokerMatch, RoomData } from "./app.js";
+import { requireAdmin, type EventData, type PokerMatch, type RoomData } from "./app.js";
 import type { ParticipationLogData } from "./repository.js";
 
 type PokerStub = DurableObjectStub<PokerMatch>;
 const pokerStubKey = createContextKey<PokerStub | undefined>(undefined);
+const adminTokenKey = createContextKey<string | undefined>(undefined);
 
 function requireStub(context: { values: { get<T>(key: ReturnType<typeof createContextKey<T>>): T } }): PokerStub {
   const stub = context.values.get(pokerStubKey);
@@ -53,6 +55,7 @@ async function fromRoom<T>(operation: Promise<T>): Promise<T> {
       RESOURCE_EXHAUSTED: Code.ResourceExhausted,
       DEADLINE_EXCEEDED: Code.DeadlineExceeded,
       NOT_FOUND: Code.NotFound,
+      UNAVAILABLE: Code.Unavailable,
     };
     throw new ConnectError(detail, codes[name] ?? Code.Internal);
   }
@@ -69,6 +72,7 @@ function rpcRoom(room: RoomData) {
       stack: BigInt(player.stack),
       streetBet: BigInt(player.streetBet),
       totalBet: BigInt(player.totalBet),
+      lifetimeScore: BigInt(player.lifetimeScore ?? 0),
     })),
     legalActions: room.legalActions && {
       ...room.legalActions,
@@ -150,6 +154,14 @@ function routes(router: ConnectRouter): void {
     },
   });
 
+  router.service(AdminService, {
+    async setRoomPaused(request, context) {
+      requireAdmin(context.requestHeader, context.values.get(adminTokenKey));
+      const room = await fromRoom(requireStub(context).setRoomPaused(request.paused));
+      return { room: rpcRoom(room) };
+    },
+  });
+
   router.service(PokerService, {
     getGameConfig() {
       return {
@@ -169,12 +181,22 @@ function routes(router: ConnectRouter): void {
       const room = await fromRoom(requireStub(context).leaveRoom(bearer(context.requestHeader)!));
       return { room: rpcRoom(room) };
     },
-    async getRoom(_request, context) {
-      const snapshot = await fromRoom(requireStub(context).getRoom(bearer(context.requestHeader, false)));
+    async getRoom(request, context) {
+      const snapshot = await fromRoom(requireStub(context).getRoom(
+        bearer(context.requestHeader, false),
+        request.omitEvents,
+      ));
       return {
         room: rpcRoom(snapshot.room),
         events: snapshot.events.map(rpcEvent),
       };
+    },
+    async listRoomEvents(request, context) {
+      const page = await fromRoom(requireStub(context).listRoomEvents(
+        Number(request.beforeEventSeq),
+        request.limit,
+      ));
+      return { events: page.events.map(rpcEvent), hasMore: page.hasMore };
     },
     async getMyScore(_request, context) {
       const score = await fromRoom(requireStub(context).getMyScore(bearer(context.requestHeader)!));
@@ -200,6 +222,13 @@ function routes(router: ConnectRouter): void {
         room: rpcRoom(response.room),
         events: response.events.map(rpcEvent),
       };
+    },
+    async sendChat(request, context) {
+      const event = await fromRoom(requireStub(context).sendChat(
+        bearer(context.requestHeader)!,
+        request.text,
+      ));
+      return { acceptedEvent: rpcEvent(event) };
     },
     async act(request, context) {
       const response = await fromRoom(requireStub(context).act(
@@ -231,7 +260,9 @@ function routes(router: ConnectRouter): void {
 const rpcHandler = connectWorkersAdapter<Env>({
   routes,
   contextValues(_request, env) {
-    return createContextValues().set(pokerStubKey, env.POKER_MATCHES.getByName("main"));
+    return createContextValues()
+      .set(pokerStubKey, env.POKER_MATCHES.getByName("main"))
+      .set(adminTokenKey, env.POKER_ADMIN_TOKEN);
   },
   async fallback(request, unknownEnv) {
     const env = unknownEnv as Env;
