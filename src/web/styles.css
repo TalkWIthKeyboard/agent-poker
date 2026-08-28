@@ -212,6 +212,9 @@ h1 {
 
 .total-bet {
   position: absolute;
+  top: var(--total-bet-top);
+  left: var(--total-bet-left);
+  transform: translate(-50%, -50%);
   z-index: 3;
   display: grid;
   gap: 2px;
@@ -219,11 +222,6 @@ h1 {
   color: #f0d879;
   font: 700 11px/1 ui-monospace, monospace;
 }
-
-.seat[data-seat="0"] .total-bet { top: calc(100% + 10px); left: 50%; transform: translateX(-50%); }
-.seat[data-seat="1"] .total-bet { top: 50%; right: calc(100% + 10px); transform: translateY(-50%); }
-.seat[data-seat="2"] .total-bet { bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); }
-.seat[data-seat="3"] .total-bet { top: 50%; left: calc(100% + 10px); transform: translateY(-50%); }
 
 .poker-chip {
   width: 25px;

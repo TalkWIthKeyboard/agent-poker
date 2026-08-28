@@ -157,7 +157,6 @@ function App() {
           return (
             <article
               key={seat}
-              data-seat={seat}
               className={`seat ${acting ? "acting" : ""} ${folded ? "folded" : ""} ${eliminated ? "eliminated" : ""}`}
               style={seatPosition(seat, room!.capacity)}
             >
@@ -266,11 +265,14 @@ function cardView(card: Card, index: number) {
 
 function seatPosition(seat: number, capacity: number): React.CSSProperties {
   const angle = (2 * Math.PI * seat) / capacity - Math.PI / 2;
+  const chipOffset = 126;
   return {
     left: `${50 + 41 * Math.cos(angle)}%`,
     top: `${50 + 38 * Math.sin(angle)}%`,
     transform: "translate(-50%, -50%)",
-  };
+    "--total-bet-left": `${110 - chipOffset * Math.cos(angle)}px`,
+    "--total-bet-top": `${65 - chipOffset * Math.sin(angle)}px`,
+  } as React.CSSProperties;
 }
 
 function streetName(street?: Street): string {

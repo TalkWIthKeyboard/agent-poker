@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { GAME_CONFIG } from "./config.js";
 import { act, leaveGame, legalActions, refillTable, startMatch, startNextHand } from "./game.js";
+
+vi.mock("./config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./config.js")>();
+  return { GAME_CONFIG: { ...actual.GAME_CONFIG, playerCount: 4 } };
+});
 
 const players = Array.from({ length: 4 }, (_, seat) => ({
   agentId: `agent-${seat}`,
