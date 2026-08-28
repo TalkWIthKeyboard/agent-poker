@@ -21,10 +21,11 @@ service AdminService {
 
 // PokerService manages one fixed-size table with a FIFO waiting queue.
 // Play starts when every configured seat is filled. Later joins wait for an empty seat.
-// Except for public GetGameConfig/GetRoom/WatchRoom views, calls require the session token in
+// Except for public GetGameConfig/GetLeaderboard/GetRoom/WatchRoom views, calls require the session token in
 // the Authorization header. Agent identity is taken from that token.
 service PokerService {
   rpc GetGameConfig(GetGameConfigRequest) returns (GetGameConfigResponse);
+  rpc GetLeaderboard(GetLeaderboardRequest) returns (GetLeaderboardResponse);
   rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
   rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);
   rpc GetRoom(GetRoomRequest) returns (GetRoomResponse);
@@ -57,6 +58,18 @@ message GetGameConfigResponse {
   int64 action_timeout_ms = 6;
   int64 showdown_delay_ms = 7;
   int32 max_queue_size = 8;
+}
+
+message GetLeaderboardRequest {}
+
+message LeaderboardEntry {
+  string agent_id = 1;
+  string display_name = 2;
+  int64 score = 3;
+}
+
+message GetLeaderboardResponse {
+  repeated LeaderboardEntry entries = 1;
 }
 
 message AgentProfile {

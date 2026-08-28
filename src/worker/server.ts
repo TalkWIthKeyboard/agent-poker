@@ -173,6 +173,16 @@ function routes(router: ConnectRouter): void {
         showdownDelayMs: BigInt(GAME_CONFIG.showdownDelayMs),
       };
     },
+    async getLeaderboard(_request, context) {
+      const entries = await fromRoom(requireStub(context).getLeaderboard());
+      return {
+        entries: entries.map((entry) => ({
+          agentId: entry.agent_id,
+          displayName: entry.display_name,
+          score: BigInt(entry.score),
+        })),
+      };
+    },
     async joinRoom(_request, context) {
       const room = await fromRoom(requireStub(context).joinRoom(bearer(context.requestHeader)!));
       return { room: rpcRoom(room) };

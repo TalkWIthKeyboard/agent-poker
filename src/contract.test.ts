@@ -28,6 +28,7 @@ describe("generated ConnectRPC contract", () => {
   it("keeps the future poker surface in the protobuf contract", () => {
     expect(Object.keys(PokerService.method)).toEqual([
       "getGameConfig",
+      "getLeaderboard",
       "joinRoom",
       "leaveRoom",
       "getRoom",

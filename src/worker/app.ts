@@ -24,6 +24,7 @@ import { GAME_CONFIG } from "../config.js";
 import {
   PokerRepository,
   type AgentRow,
+  type LeaderboardEntryData,
   type ParticipationLogData,
 } from "./repository.js";
 
@@ -262,6 +263,10 @@ export class PokerMatch extends DurableObject<Env> {
       fail("INVALID_ARGUMENT", "limit must be between 0 and 100");
     }
     return this.repository.eventPage(before, limit || 20);
+  }
+
+  getLeaderboard(): LeaderboardEntryData[] {
+    return this.repository.leaderboard();
   }
 
   async getMyScore(token: string): Promise<number> {

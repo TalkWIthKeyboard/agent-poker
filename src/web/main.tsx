@@ -7,6 +7,7 @@ import {
   RoomStatus,
   Street,
   type Card,
+  type LeaderboardEntry,
   type RoomEvent,
   type RoomSnapshot,
 } from "../gen/poker/v1/poker_pb.js";
@@ -14,12 +15,16 @@ import { playerDisplayState, playerStateLabel } from "./player-state.js";
 import "./styles.css";
 
 const EVENT_PAGE_SIZE = 20;
+const client = createClient(
+  PokerService,
+  createConnectTransport({ baseUrl: window.location.origin, useBinaryFormat: true }),
+);
 
 function App() {
-  const client = useMemo(() => createClient(
-    PokerService,
-    createConnectTransport({ baseUrl: window.location.origin, useBinaryFormat: true }),
-  ), []);
+  return window.location.pathname === "/leaderboard" ? <LeaderboardPage /> : <TablePage />;
+}
+
+function TablePage() {
   const [room, setRoom] = useState<RoomSnapshot>();
   const [events, setEvents] = useState<RoomEvent[]>([]);
   const [hasMoreEvents, setHasMoreEvents] = useState(false);
@@ -126,9 +131,12 @@ function App() {
           <p className="eyebrow">AGENT POKER · LIVE TABLE</p>
           <h1>{room?.capacity || "—"} agents. One table.</h1>
         </div>
-        <div className={`connection ${connection === "live" ? "online" : ""}`}>
-          <span />
-          {connection === "live" ? "LIVE" : connection}
+        <div className="header-actions">
+          <a className="page-link" href="/leaderboard">Leaderboard →</a>
+          <div className={`connection ${connection === "live" ? "online" : ""}`}>
+            <span />
+            {connection === "live" ? "LIVE" : connection}
+          </div>
         </div>
       </header>
 
@@ -243,6 +251,54 @@ function App() {
             </li>
           )}
         </ol>
+      </section>
+    </main>
+  );
+}
+
+function LeaderboardPage() {
+  const [entries, setEntries] = useState<LeaderboardEntry[]>();
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void client.getLeaderboard({}, { signal: controller.signal })
+      .then((response) => setEntries(response.entries))
+      .catch((cause) => {
+        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load scores");
+      });
+    return () => controller.abort();
+  }, []);
+
+  return (
+    <main>
+      <header>
+        <div>
+          <p className="eyebrow">AGENT POKER · LIFETIME POINTS</p>
+          <h1>Leaderboard</h1>
+        </div>
+        <a className="page-link" href="/">← Live table</a>
+      </header>
+
+      <section className="leaderboard">
+        <div className="leaderboard-title">
+          <h2>Top agents</h2>
+          <span>TOP 100</span>
+        </div>
+        {error ? <p className="leaderboard-message">{error}</p> : entries ? (
+          <table>
+            <thead><tr><th>Rank</th><th>Agent</th><th>Points</th></tr></thead>
+            <tbody>
+              {entries.map((entry, index) => (
+                <tr key={entry.agentId}>
+                  <td>#{index + 1}</td>
+                  <th scope="row">{entry.displayName}</th>
+                  <td>{entry.score.toString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <p className="leaderboard-message">Loading scores…</p>}
       </section>
     </main>
   );

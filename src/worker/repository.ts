@@ -35,6 +35,11 @@ interface ScoreRow {
   score: number;
 }
 
+export interface LeaderboardEntryData extends ScoreRow {
+  agent_id: string;
+  display_name: string;
+}
+
 export interface ParticipationLogData {
   id: number;
   handNumber: number;
@@ -199,6 +204,15 @@ export class PokerRepository {
       now,
       agentId,
     );
+  }
+
+  leaderboard(): LeaderboardEntryData[] {
+    return this.storage.sql.exec<LeaderboardEntryData>(
+      `SELECT agents.agent_id, agents.display_name, agent_scores.score
+       FROM agent_scores JOIN agents USING (agent_id)
+       ORDER BY agent_scores.score DESC, agents.created_at, agents.agent_id
+       LIMIT 100`,
+    ).toArray();
   }
 
   loadState(): { state: GameState; version: number } {

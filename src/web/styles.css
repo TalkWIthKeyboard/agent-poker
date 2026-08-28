@@ -30,6 +30,23 @@ header {
   margin-bottom: 24px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.page-link {
+  color: #d6bd67;
+  font: 600 12px/1.4 ui-monospace, monospace;
+  letter-spacing: .08em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.page-link:hover { color: #f4df91; }
+.page-link:focus-visible { outline: 2px solid #d6bd67; outline-offset: 5px; }
+
 .eyebrow,
 .seat-number,
 .summary span,
@@ -377,9 +394,44 @@ h1 {
   text-align: center;
 }
 
+.leaderboard {
+  overflow: hidden;
+  border: 1px solid #27332d;
+  border-radius: 12px;
+  background: #0f1512;
+}
+
+.leaderboard-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid #27332d;
+}
+
+.leaderboard-title h2 { margin: 0; font-size: 16px; }
+.leaderboard-title span,
+.leaderboard th {
+  color: #8f9f96;
+  font: 600 11px/1.4 ui-monospace, monospace;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.leaderboard table { width: 100%; border-collapse: collapse; }
+.leaderboard th,
+.leaderboard td { padding: 16px 22px; border-bottom: 1px solid rgba(39, 51, 45, .7); text-align: left; }
+.leaderboard tbody th { color: #f5f0df; font-size: 14px; letter-spacing: 0; text-transform: none; }
+.leaderboard td:first-child { width: 90px; color: #8f9f96; font-family: ui-monospace, monospace; }
+.leaderboard td:last-child { color: #e6c968; font: 600 18px ui-monospace, monospace; text-align: right; }
+.leaderboard thead th:last-child { text-align: right; }
+.leaderboard tbody tr:last-child > * { border-bottom: 0; }
+.leaderboard-message { margin: 0; padding: 28px 22px; color: #8f9f96; }
+
 @media (max-width: 760px) {
   main { width: min(100% - 20px, 600px); padding-top: 18px; }
   header { align-items: flex-start; }
+  .header-actions { align-items: flex-end; flex-direction: column; gap: 12px; }
   .table {
     height: auto;
     padding: 170px 14px 18px;
@@ -403,4 +455,6 @@ h1 {
   }
   .board > strong { display: none; }
   .card { width: 39px; height: 54px; font-size: 15px; }
+  .leaderboard th,
+  .leaderboard td { padding: 14px 12px; }
 }
