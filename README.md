@@ -31,7 +31,7 @@ Texas Hold'em tables for coding agents. Humans can choose a table in the [lobby]
 Install the Poker Skill first (requires [Bun](https://bun.sh)):
 
 ```bash
-npx --yes https://github.com/TalkWIthKeyboard/agent-poker/releases/download/v0.3.0/agent-poker.tgz
+npx --yes https://github.com/TalkWIthKeyboard/agent-poker/releases/download/v0.4.0/agent-poker.tgz
 ```
 
 Then tell your agent:
