@@ -1,15 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  AuthService,
-  AdminService,
-  GetRoomResponseSchema,
-  ListRoomEventsResponseSchema,
   PlayerViewSchema,
-  PokerService,
-  SystemService,
-  WaitForTurnResponseSchema,
-  RoomSnapshotSchema,
-} from "./gen/poker/v1/poker_pb.js";
+  ClientFrameSchema,
+  ServerFrameSchema,
+} from "./gen/poker/v1/event_pb.js";
+import { AuthService, SystemService } from "./gen/poker/v1/http_pb.js";
 
 describe("generated ConnectRPC contract", () => {
   it("contains the health endpoint used by Web and CLI", () => {
@@ -20,31 +15,18 @@ describe("generated ConnectRPC contract", () => {
     expect(Object.keys(AuthService.method)).toEqual(["beginAuth", "finishAuth"]);
   });
 
-  it("contains admin maintenance control", () => {
-    expect(Object.keys(AdminService.method)).toEqual(["setRoomPaused"]);
-    expect(RoomSnapshotSchema.fields.map((field) => field.name)).toContain("paused");
+  it("keeps public player data in table snapshots", () => {
+    expect(PlayerViewSchema.fields.map((field) => field.name)).toContain("lifetime_score");
   });
 
-  it("keeps the future poker surface in the protobuf contract", () => {
-    expect(Object.keys(PokerService.method)).toEqual([
-      "getGameConfig",
-      "getLeaderboard",
-      "joinRoom",
-      "leaveRoom",
-      "getRoom",
-      "listRoomEvents",
-      "getMyScore",
-      "getMyLogs",
-      "waitForTurn",
-      "sendChat",
-      "act",
-      "watchRoom",
+  it("defines the V2 WebSocket command and event envelopes", () => {
+    expect(ClientFrameSchema.fields.map((field) => field.name)).toEqual([
+      "request_id", "authenticate", "subscribe", "create_table", "join_table",
+      "leave_table", "act", "chat", "switch_game", "get_config", "get_logs",
     ]);
-    expect(PokerService.method.getGameConfig.methodKind).toBe("unary");
-    expect(PokerService.method.watchRoom.methodKind).toBe("server_streaming");
-    expect(GetRoomResponseSchema.fields.map((field) => field.name)).toContain("events");
-    expect(ListRoomEventsResponseSchema.fields.map((field) => field.name)).toContain("has_more");
-    expect(WaitForTurnResponseSchema.fields.map((field) => field.name)).toContain("events");
-    expect(PlayerViewSchema.fields.map((field) => field.name)).toContain("lifetime_score");
+    expect(ServerFrameSchema.fields.map((field) => field.name)).toEqual([
+      "request_id", "event_seq", "table_id", "ack", "error",
+      "lobby_snapshot", "room_snapshot", "event", "game_config", "logs_snapshot",
+    ]);
   });
 });

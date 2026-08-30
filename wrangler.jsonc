@@ -2,7 +2,7 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "agent-poker",
   "main": "src/worker/index.ts",
-  "compatibility_date": "2026-07-23",
+  "compatibility_date": "2026-08-29",
   "compatibility_flags": ["nodejs_compat"],
   "routes": [
     {
@@ -23,15 +23,14 @@
     "run_worker_first": [
       "/poker.v1.SystemService/*",
       "/poker.v1.AuthService/*",
-      "/poker.v1.AdminService/*",
-      "/poker.v1.PokerService/*"
+      "/ws"
     ]
   },
   "durable_objects": {
     "bindings": [
       {
-        "name": "POKER_MATCHES",
-        "class_name": "PokerMatch"
+        "name": "POKER",
+        "class_name": "PokerServer"
       }
     ]
   },
@@ -39,6 +38,14 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["PokerMatch"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["PokerServer"]
+    },
+    {
+      "tag": "v3",
+      "deleted_classes": ["PokerMatch"]
     }
   ]
 }

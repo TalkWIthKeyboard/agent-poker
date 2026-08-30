@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { GAME_CONFIG } from "./config.js";
+import { GAME_CONFIG } from "../../../config.js";
 import { act, leaveGame, legalActions, refillTable, startMatch, startNextHand } from "./game.js";
 
-vi.mock("./config.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./config.js")>();
+vi.mock("../../../config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../config.js")>();
   return { GAME_CONFIG: { ...actual.GAME_CONFIG, playerCount: 4 } };
 });
 
@@ -11,12 +11,13 @@ const players = Array.from({ length: 4 }, (_, seat) => ({
   agentId: `agent-${seat}`,
   displayName: `Player ${seat}`,
   seat,
+  stack: GAME_CONFIG.startingStack,
 }));
 const totalChips = GAME_CONFIG.playerCount * GAME_CONFIG.startingStack;
 
 describe("poker game", () => {
   it("posts blinds and starts with the seat after the big blind", () => {
-    const { state } = startMatch(players, orderedDeck(), 1_000, "match-1", "decision-1");
+    const { state } = startMatch(players, orderedDeck(), 1_000, "decision-1");
 
     expect(state.dealerSeat).toBe(0);
     expect(state.players[1].streetBet).toBe(5);
@@ -31,7 +32,7 @@ describe("poker game", () => {
   });
 
   it("finishes a four-way all-in match and conserves chips", () => {
-    let state = startMatch(players, winningDeck(), 1_000, "match-1", "decision-1").state;
+    let state = startMatch(players, winningDeck(), 1_000, "decision-1").state;
     state = act(state, "decision-1", "raise", GAME_CONFIG.startingStack, 1_001, "decision-2").state;
     state = act(state, "decision-2", "call", 0, 1_002, "decision-3").state;
     state = act(state, "decision-3", "call", 0, 1_003, "decision-4").state;
@@ -49,11 +50,11 @@ describe("poker game", () => {
   });
 
   it("removes busted players and fills their seats from the queue in FIFO order", () => {
-    let state = startMatch(players, winningDeck(), 1_000, "match-1", "decision-1").state;
+    let state = startMatch(players, winningDeck(), 1_000, "decision-1").state;
     state.waitingPlayers = [
       { agentId: "queued-1", displayName: "Queued 1", stack: 750 },
-      { agentId: "queued-2", displayName: "Queued 2" },
-      { agentId: "queued-3", displayName: "Queued 3" },
+      { agentId: "queued-2", displayName: "Queued 2", stack: GAME_CONFIG.startingStack },
+      { agentId: "queued-3", displayName: "Queued 3", stack: GAME_CONFIG.startingStack },
     ];
     state = act(state, "decision-1", "raise", GAME_CONFIG.startingStack, 1_001, "decision-2").state;
     state = act(state, "decision-2", "call", 0, 1_002, "decision-3").state;
@@ -79,8 +80,8 @@ describe("poker game", () => {
   });
 
   it("folds a leaving player and fills the seat after the hand", () => {
-    let state = startMatch(players, orderedDeck(), 1_000, "match-1", "decision-1").state;
-    state.waitingPlayers = [{ agentId: "queued-1", displayName: "Queued 1" }];
+    let state = startMatch(players, orderedDeck(), 1_000, "decision-1").state;
+    state.waitingPlayers = [{ agentId: "queued-1", displayName: "Queued 1", stack: GAME_CONFIG.startingStack }];
 
     const left = leaveGame(state, "agent-3", 1_001, "decision-2");
     state = left.state;
@@ -99,7 +100,7 @@ describe("poker game", () => {
   });
 
   it("allows a player to leave before their turn without changing the current decision", () => {
-    const state = startMatch(players, orderedDeck(), 1_000, "match-1", "decision-1").state;
+    const state = startMatch(players, orderedDeck(), 1_000, "decision-1").state;
     const left = leaveGame(state, "agent-1", 1_001, "decision-2").state;
 
     expect(left.players[1]).toMatchObject({ stack: 0, folded: true, leaving: true });
@@ -107,7 +108,7 @@ describe("poker game", () => {
   });
 
   it("does not settle the hand twice when a folded player leaves during showdown", () => {
-    let state = startMatch(players, orderedDeck(), 1_000, "match-1", "decision-1").state;
+    let state = startMatch(players, orderedDeck(), 1_000, "decision-1").state;
     state = act(state, "decision-1", "fold", 0, 1_001, "decision-2").state;
     state = act(state, "decision-2", "fold", 0, 1_002, "decision-3").state;
     state = act(state, "decision-3", "fold", 0, 1_003, "decision-4").state;
@@ -120,7 +121,7 @@ describe("poker game", () => {
   });
 
   it("rejects a consumed decision", () => {
-    const state = startMatch(players, orderedDeck(), 1_000, "match-1", "decision-1").state;
+    const state = startMatch(players, orderedDeck(), 1_000, "decision-1").state;
     const next = act(state, "decision-1", "call", 0, 1_001, "decision-2").state;
 
     expect(() => act(next, "decision-1", "call", 0, 1_002, "decision-3"))
@@ -128,7 +129,7 @@ describe("poker game", () => {
   });
 
   it("starts the next hand when three players fold", () => {
-    let state = startMatch(players, orderedDeck(), 1_000, "match-1", "decision-1").state;
+    let state = startMatch(players, orderedDeck(), 1_000, "decision-1").state;
     state = act(state, "decision-1", "fold", 0, 1_001, "decision-2").state;
     state = act(state, "decision-2", "fold", 0, 1_002, "decision-3").state;
     const completed = act(state, "decision-3", "fold", 0, 1_003, "decision-4");
@@ -155,14 +156,14 @@ describe("poker game", () => {
   });
 
   it("does not mutate the input state", () => {
-    const state = startMatch(players, orderedDeck(), 1_000, "match-1", "decision-1").state;
+    const state = startMatch(players, orderedDeck(), 1_000, "decision-1").state;
     const before = structuredClone(state);
     act(state, "decision-1", "call", 0, 1_001, "decision-2");
     expect(state).toEqual(before);
   });
 
   it("settles multiple all-in side pots without losing chips", () => {
-    let state = startMatch(players, winningDeck(), 1_000, "match-1", "decision-1").state;
+    let state = startMatch(players, winningDeck(), 1_000, "decision-1").state;
     state.players[3].stack = 20;
     state.players[0].stack = 40;
     state.players[1].stack = 55;
@@ -182,7 +183,7 @@ describe("poker game", () => {
   });
 
   it("keeps a full big-blind opening bet when the big blind is short", () => {
-    let state = startMatch(players, orderedDeck(), 1_000, "match-1", "decision-1").state;
+    let state = startMatch(players, orderedDeck(), 1_000, "decision-1").state;
     state.players[3].stack = 3;
     state.players[0].stack = 197;
     state = act(state, "decision-1", "fold", 0, 1_001, "decision-2").state;

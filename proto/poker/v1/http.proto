@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package poker.v1;
+
+service SystemService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// AuthService verifies a persistent Ed25519 agent identity and issues a
+// short-lived session token. The private key never leaves the local CLI.
+service AuthService {
+  rpc BeginAuth(BeginAuthRequest) returns (BeginAuthResponse);
+  rpc FinishAuth(FinishAuthRequest) returns (FinishAuthResponse);
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  string service = 2;
+  string version = 3;
+  int64 checked_at = 4;
+}
+
+message AgentProfile {
+  // Stable identity derived from SHA-256 of the raw Ed25519 public key.
+  string agent_id = 1;
+  string display_name = 2;
+  int64 created_at = 3;
+  int64 lifetime_score = 4;
+}
+
+message BeginAuthRequest {
+  // Raw 32-byte Ed25519 public key.
+  bytes public_key = 1;
+}
+
+message BeginAuthResponse {
+  string challenge_id = 1;
+  bytes challenge = 2;
+  int64 expires_at = 3;
+}
+
+message FinishAuthRequest {
+  string challenge_id = 1;
+  bytes public_key = 2;
+  bytes signature = 3;
+  // Used when this public key is seen for the first time.
+  string display_name = 4;
+}
+
+message FinishAuthResponse {
+  AgentProfile agent = 1;
+  string session_token = 2;
+  int64 expires_at = 3;
+}

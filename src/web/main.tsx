@@ -1,38 +1,34 @@
-import { createClient } from "@connectrpc/connect";
-import { createConnectTransport } from "@connectrpc/connect-web";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  PokerService,
+  ClientFrameSchema,
   RoomStatus,
+  ServerFrameSchema,
   Street,
   type Card,
   type LeaderboardEntry,
   type RoomEvent,
   type RoomSnapshot,
-} from "../gen/poker/v1/poker_pb.js";
+  type ServerFrame,
+  type TableSummary,
+} from "../gen/poker/v1/event_pb.js";
 import { playerDisplayState, playerStateLabel } from "./player-state.js";
 import "./styles.css";
 
-const EVENT_PAGE_SIZE = 20;
-const client = createClient(
-  PokerService,
-  createConnectTransport({ baseUrl: window.location.origin, useBinaryFormat: true }),
-);
-
 function App() {
-  return window.location.pathname === "/leaderboard" ? <LeaderboardPage /> : <TablePage />;
+  if (window.location.pathname === "/") return <LobbyPage />;
+  if (window.location.pathname === "/leaderboard") return <LeaderboardPage />;
+  return window.location.pathname.startsWith("/tables/") ? <TablePage /> : <LobbyPage />;
 }
 
 function TablePage() {
+  const tableId = decodeURIComponent(window.location.pathname.slice("/tables/".length));
   const [room, setRoom] = useState<RoomSnapshot>();
   const [events, setEvents] = useState<RoomEvent[]>([]);
-  const [hasMoreEvents, setHasMoreEvents] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [connection, setConnection] = useState("connecting");
   const [now, setNow] = useState(Date.now());
   const activityRef = useRef<HTMLOListElement>(null);
-  const loadMoreRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -40,80 +36,26 @@ function TablePage() {
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    let after: bigint;
-
-    async function watch() {
-      const [initial, activity] = await Promise.all([
-        client.getRoom({ omitEvents: true }, { signal: controller.signal }),
-        client.listRoomEvents({ limit: EVENT_PAGE_SIZE }, { signal: controller.signal }),
-      ]);
-      const newest = activity.events.at(-1);
-      after = newest?.seq ?? initial.room?.latestEventSeq ?? 0n;
-      setRoom(newest?.seq && newest.seq > (initial.room?.latestEventSeq ?? 0n)
-        ? newest.room
-        : initial.room);
-      setEvents(activity.events);
-      setHasMoreEvents(activity.hasMore);
-
-      while (!controller.signal.aborted) {
-        try {
-          setConnection("live");
-          for await (const response of client.watchRoom(
-            { afterEventSeq: after },
-            { signal: controller.signal },
-          )) {
-            if (!response.event) continue;
-            after = response.event.seq;
-            setRoom(response.event.room);
-            setEvents((current) => mergeEvents(current, [response.event!]));
-          }
-        } catch (cause) {
-          if (controller.signal.aborted) return;
-          setConnection(cause instanceof Error ? cause.message : "reconnecting");
+    let after = 0n;
+    return subscribe(
+      { lobby: false, tableId, afterEventSeq: after },
+      (frame) => {
+        if (frame.payload.case === "roomSnapshot") {
+          after = frame.eventSeq > after ? frame.eventSeq : after;
+          setRoom(frame.payload.value);
+        } else if (frame.payload.case === "event") {
+          const event = frame.payload.value;
+          after = event.seq;
+          setRoom(event.room);
+          setEvents((current) => mergeEvents(current, [event]));
+        } else if (frame.payload.case === "error") {
+          setConnection(frame.payload.value.message);
         }
-        await new Promise((resolve) => setTimeout(resolve, 1_000));
-      }
-    }
-
-    void watch().catch((cause) => {
-      if (!controller.signal.aborted) {
-        setConnection(cause instanceof Error ? cause.message : "disconnected");
-      }
-    });
-    return () => controller.abort();
-  }, [client]);
-
-  const oldestEventSeq = events[0]?.seq;
-
-  async function loadMoreEvents() {
-    const before = oldestEventSeq;
-    if (!before || loadingMore || !hasMoreEvents) return;
-    setLoadingMore(true);
-    try {
-      const page = await client.listRoomEvents({
-        beforeEventSeq: before,
-        limit: EVENT_PAGE_SIZE,
-      });
-      setEvents((current) => mergeEvents(page.events, current));
-      setHasMoreEvents(page.hasMore);
-    } catch (cause) {
-      setConnection(cause instanceof Error ? cause.message : "could not load activity");
-    } finally {
-      setLoadingMore(false);
-    }
-  }
-
-  useEffect(() => {
-    const root = activityRef.current;
-    const target = loadMoreRef.current;
-    if (!root || !target || loadingMore || !hasMoreEvents) return;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) void loadMoreEvents();
-    }, { root, rootMargin: "0px 0px 120px 0px" });
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [oldestEventSeq, hasMoreEvents, loadingMore]);
+      },
+      setConnection,
+      () => ({ lobby: false, tableId, afterEventSeq: after }),
+    );
+  }, [tableId]);
 
   const players = room?.players ?? [];
   const playerNames = useMemo(() => {
@@ -129,9 +71,10 @@ function TablePage() {
       <header>
         <div>
           <p className="eyebrow">AGENT POKER · LIVE TABLE</p>
-          <h1>{room?.capacity || "—"} agents. One table.</h1>
+          <h1>{tableId} · {room?.capacity || "—"} agents</h1>
         </div>
         <div className="header-actions">
+          <a className="page-link" href="/">Lobby →</a>
           <a className="page-link" href="/leaderboard">Leaderboard →</a>
           <div className={`connection ${connection === "live" ? "online" : ""}`}>
             <span />
@@ -245,13 +188,66 @@ function TablePage() {
               </li>
             );
           })}
-          {hasMoreEvents && (
-            <li aria-live="polite" className="load-more-row" ref={loadMoreRef}>
-              {loadingMore ? "Loading earlier activity…" : ""}
-            </li>
-          )}
         </ol>
       </section>
+    </main>
+  );
+}
+
+function LobbyPage() {
+  const [tables, setTables] = useState<TableSummary[]>();
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    return subscribe({ lobby: true }, (frame) => {
+      if (frame.payload.case === "lobbySnapshot") setTables(frame.payload.value.tables);
+      if (frame.payload.case === "error") setError(frame.payload.value.message);
+    }, (status) => status !== "live" && setError(status));
+  }, []);
+
+  return (
+    <main>
+      <header>
+        <div>
+          <p className="eyebrow">AGENT POKER · LOBBY</p>
+          <h1>Choose a table</h1>
+        </div>
+        <a className="page-link" href="/leaderboard">Leaderboard →</a>
+      </header>
+      {error ? <p className="leaderboard-message">{error}</p> : (
+        <section className="lobby-grid" aria-label="Poker tables">
+          {(tables ?? []).map((table) => (
+            <a
+              aria-label={`${table.displayName}, ${table.players.length} of ${table.capacity} seats occupied`}
+              className="lobby-table"
+              href={`/tables/${encodeURIComponent(table.tableId)}`}
+              key={table.tableId}
+            >
+              <div className="lobby-table-stage">
+                <div className="lobby-felt">
+                  <span>{table.players.length}/{table.capacity}</span>
+                </div>
+                {Array.from({ length: table.capacity }, (_, seat) => {
+                  const player = table.players.find((candidate) => candidate.seat === seat);
+                  return (
+                    <span
+                      aria-label={player ? `Seat ${seat + 1}: ${player.displayName}` : `Seat ${seat + 1}: open`}
+                      className={`lobby-seat ${player ? "occupied" : ""}`}
+                      key={seat}
+                      style={lobbySeatPosition(seat, table.capacity)}
+                      title={player?.displayName ?? "Open seat"}
+                    >
+                      <strong>{player ? player.displayName.slice(0, 2).toUpperCase() : "+"}</strong>
+                      <small>{player?.displayName ?? "Open"}</small>
+                    </span>
+                  );
+                })}
+              </div>
+            </a>
+          ))}
+          {tables?.length === 0 && <p className="leaderboard-message">No tables yet.</p>}
+        </section>
+      )}
     </main>
   );
 }
@@ -261,13 +257,10 @@ function LeaderboardPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const controller = new AbortController();
-    void client.getLeaderboard({}, { signal: controller.signal })
-      .then((response) => setEntries(response.entries))
-      .catch((cause) => {
-        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load scores");
-      });
-    return () => controller.abort();
+    return subscribe({ lobby: true }, (frame) => {
+      if (frame.payload.case === "lobbySnapshot") setEntries(frame.payload.value.leaderboard);
+      if (frame.payload.case === "error") setError(frame.payload.value.message);
+    }, (status) => status !== "live" && setError(status));
   }, []);
 
   return (
@@ -277,7 +270,7 @@ function LeaderboardPage() {
           <p className="eyebrow">AGENT POKER · LIFETIME POINTS</p>
           <h1>Leaderboard</h1>
         </div>
-        <a className="page-link" href="/">← Live table</a>
+        <a className="page-link" href="/">← Lobby</a>
       </header>
 
       <section className="leaderboard">
@@ -309,6 +302,39 @@ function mergeEvents(first: RoomEvent[], second: RoomEvent[]): RoomEvent[] {
   return [...events.values()].sort((left, right) => left.seq < right.seq ? -1 : left.seq > right.seq ? 1 : 0);
 }
 
+function subscribe(
+  initial: { lobby: boolean; tableId?: string; afterEventSeq?: bigint },
+  receive: (frame: ServerFrame) => void,
+  status: (value: string) => void,
+  current: () => { lobby: boolean; tableId?: string; afterEventSeq?: bigint } = () => initial,
+): () => void {
+  let closed = false;
+  let socket: WebSocket;
+  let retry: number | undefined;
+  const connect = () => {
+    socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+    socket.binaryType = "arraybuffer";
+    socket.onopen = () => {
+      status("live");
+      socket.send(toBinary(ClientFrameSchema, create(ClientFrameSchema, {
+        requestId: crypto.randomUUID(),
+        payload: { case: "subscribe", value: current() },
+      })));
+    };
+    socket.onmessage = (event) => receive(fromBinary(ServerFrameSchema, new Uint8Array(event.data as ArrayBuffer)));
+    socket.onerror = () => status("reconnecting");
+    socket.onclose = () => {
+      if (!closed) retry = window.setTimeout(connect, 1_000);
+    };
+  };
+  connect();
+  return () => {
+    closed = true;
+    if (retry !== undefined) window.clearTimeout(retry);
+    socket.close();
+  };
+}
+
 function cardView(card: Card, index: number) {
   const red = card.suit === "h" || card.suit === "d";
   const suits: Record<string, string> = { s: "♠", h: "♥", d: "♦", c: "♣" };
@@ -331,12 +357,20 @@ function seatPosition(seat: number, capacity: number): React.CSSProperties {
   } as React.CSSProperties;
 }
 
+function lobbySeatPosition(seat: number, capacity: number): React.CSSProperties {
+  const angle = (2 * Math.PI * seat) / capacity - Math.PI / 2;
+  return {
+    left: `${50 + 39 * Math.cos(angle)}%`,
+    top: `${50 + 36 * Math.sin(angle)}%`,
+  };
+}
+
 function streetName(street?: Street): string {
   return street === undefined || street === Street.UNSPECIFIED ? "—" : Street[street];
 }
 
 function tableMessage(room?: RoomSnapshot): string {
-  if (room?.paused) return "Room paused for maintenance";
+  if (room?.paused) return "Game stopped";
   if (!room || room.status === RoomStatus.WAITING_FOR_PLAYERS) {
     return `Waiting for ${room?.capacity ?? "—"} agents`;
   }

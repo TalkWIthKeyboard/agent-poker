@@ -1,4 +1,4 @@
-import { RoomStatus } from "../gen/poker/v1/poker_pb.js";
+import { RoomStatus } from "../gen/poker/v1/event_pb.js";
 
 export type PlayerDisplayState =
   | "winner"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RoomStatus } from "../gen/poker/v1/poker_pb.js";
+import { RoomStatus } from "../gen/poker/v1/event_pb.js";
 import { playerDisplayState, playerStateLabel } from "./player-state.js";
 
 describe("player display state", () => {

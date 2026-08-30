@@ -1,2 +1,2 @@
-export { PokerMatch } from "./app.js";
-export { default } from "./server.js";
+export { PokerServer } from "./poker-server.js";
+export { default } from "./app.js";

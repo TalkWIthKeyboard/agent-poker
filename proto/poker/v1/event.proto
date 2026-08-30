@@ -1,0 +1,221 @@
+syntax = "proto3";
+
+package poker.v1;
+
+import "poker/v1/http.proto";
+
+message GameConfig {
+  string game = 1;
+  int32 player_count = 2;
+  int64 starting_stack = 3;
+  int64 small_blind = 4;
+  int64 big_blind = 5;
+  int64 action_timeout_ms = 6;
+  int64 showdown_delay_ms = 7;
+  int32 max_queue_size = 8;
+}
+
+message LeaderboardEntry {
+  string agent_id = 1;
+  string display_name = 2;
+  int64 score = 3;
+}
+
+message TableSummary {
+  string table_id = 1;
+  string display_name = 2;
+  RoomStatus status = 3;
+  int32 capacity = 4;
+  int32 empty_seats = 5;
+  int32 queue_size = 6;
+  repeated PlayerView players = 7;
+  bool paused = 8;
+}
+
+enum MembershipStatus {
+  MEMBERSHIP_STATUS_UNSPECIFIED = 0;
+  MEMBERSHIP_STATUS_SEATED = 1;
+  MEMBERSHIP_STATUS_QUEUED = 2;
+}
+
+message Membership {
+  string table_id = 1;
+  MembershipStatus status = 2;
+  int32 queue_position = 3;
+}
+
+enum RoomStatus {
+  ROOM_STATUS_UNSPECIFIED = 0;
+  ROOM_STATUS_WAITING_FOR_PLAYERS = 1;
+  ROOM_STATUS_PLAYING = 2;
+  ROOM_STATUS_COMPLETE = 3;
+}
+
+enum Street {
+  STREET_UNSPECIFIED = 0;
+  STREET_PREFLOP = 1;
+  STREET_FLOP = 2;
+  STREET_TURN = 3;
+  STREET_RIVER = 4;
+  STREET_SHOWDOWN = 5;
+}
+
+enum ActionType {
+  ACTION_TYPE_UNSPECIFIED = 0;
+  ACTION_TYPE_FOLD = 1;
+  ACTION_TYPE_CHECK = 2;
+  ACTION_TYPE_CALL = 3;
+  ACTION_TYPE_RAISE = 4;
+}
+
+message Card {
+  string rank = 1;
+  string suit = 2;
+}
+
+message PlayerView {
+  string agent_id = 1;
+  string display_name = 2;
+  int32 seat = 3;
+  int64 stack = 4;
+  int64 street_bet = 5;
+  int64 total_bet = 6;
+  bool folded = 7;
+  bool all_in = 8;
+  repeated Card revealed_cards = 9;
+  int64 lifetime_score = 10;
+}
+
+message LegalActions {
+  repeated ActionType actions = 1;
+  int64 call_amount = 2;
+  int64 min_raise_to = 3;
+  int64 max_raise_to = 4;
+}
+
+message RoomSnapshot {
+  RoomStatus status = 1;
+  int32 capacity = 2;
+  int32 hand_number = 3;
+  Street street = 4;
+  int64 pot = 5;
+  int64 current_bet = 6;
+  int32 dealer_seat = 7;
+  int32 acting_seat = 8;
+  string acting_agent_id = 9;
+  string decision_id = 10;
+  int64 decision_deadline = 11;
+  repeated Card community_cards = 12;
+  repeated Card viewer_hole_cards = 13;
+  repeated PlayerView players = 14;
+  LegalActions legal_actions = 15;
+  int64 latest_event_seq = 16;
+  string result = 17;
+  int32 queue_size = 18;
+  bool viewer_seated = 19;
+  // One-based FIFO position. Zero means the viewer is not queued.
+  int32 viewer_queue_position = 20;
+  bool paused = 21;
+}
+
+message ParticipationLog {
+  int64 id = 1;
+  int32 hand_number = 2;
+  string kind = 3;
+  string decision_id = 4;
+  ActionType action = 5;
+  int64 amount = 6;
+  string reason = 7;
+  int64 created_at = 8;
+}
+
+message RoomEvent {
+  int64 seq = 1;
+  int32 hand_number = 2;
+  string kind = 3;
+  string agent_id = 4;
+  string message = 5;
+  int64 created_at = 6;
+  RoomSnapshot room = 7;
+}
+
+message ClientFrame {
+  string request_id = 1;
+  oneof payload {
+    AuthenticateCommand authenticate = 2;
+    SubscribeCommand subscribe = 3;
+    CreateTableCommand create_table = 4;
+    JoinTableCommand join_table = 5;
+    LeaveTableCommand leave_table = 6;
+    ActCommand act = 7;
+    ChatCommand chat = 8;
+    SwitchGameCommand switch_game = 9;
+    GetConfigCommand get_config = 10;
+    GetLogsCommand get_logs = 11;
+  }
+}
+
+message AuthenticateCommand { string session_token = 1; }
+
+message SubscribeCommand {
+  bool lobby = 1;
+  string table_id = 2;
+  int64 after_event_seq = 3;
+}
+
+message CreateTableCommand {}
+message JoinTableCommand { string table_id = 1; }
+message LeaveTableCommand {}
+
+message ActCommand {
+  string decision_id = 1;
+  ActionType action = 2;
+  int64 amount = 3;
+  string reason = 4;
+}
+
+message ChatCommand { string text = 1; }
+
+message SwitchGameCommand {
+  bool enabled = 1;
+  string admin_token = 2;
+}
+
+message GetConfigCommand {}
+
+message GetLogsCommand {
+  int64 before_id = 1;
+  int32 limit = 2;
+}
+
+message ServerFrame {
+  string request_id = 1;
+  int64 event_seq = 2;
+  string table_id = 3;
+  oneof payload {
+    CommandAck ack = 4;
+    ErrorEvent error = 5;
+    LobbySnapshot lobby_snapshot = 6;
+    RoomSnapshot room_snapshot = 7;
+    RoomEvent event = 8;
+    GameConfig game_config = 9;
+    LogsSnapshot logs_snapshot = 10;
+  }
+}
+
+message CommandAck { string command = 1; }
+
+message LogsSnapshot { repeated ParticipationLog logs = 1; }
+
+message ErrorEvent {
+  string code = 1;
+  string message = 2;
+}
+
+message LobbySnapshot {
+  repeated TableSummary tables = 1;
+  repeated LeaderboardEntry leaderboard = 2;
+  Membership membership = 3;
+  AgentProfile player = 4;
+  bool game_enabled = 5;
+}
