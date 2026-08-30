@@ -156,15 +156,16 @@ async function main(): Promise<void> {
       ? { membership: me.membership }
       : { score: me.player?.lifetimeScore ?? 0n });
   }
+  const waitAfter = command === "wait" ? BigInt(values.after) : undefined;
   const socket = await PokerConnection.open(options.server);
   try {
     let sessionToken = await authenticate(options);
     try {
-      await socket.authenticate(sessionToken);
+      await socket.authenticate(sessionToken, waitAfter);
     } catch (cause) {
       if (!(cause instanceof Error) || !cause.message.startsWith("UNAUTHENTICATED:")) throw cause;
       sessionToken = await authenticate(options, true);
-      await socket.authenticate(sessionToken);
+      await socket.authenticate(sessionToken, waitAfter);
     }
     if (command === "create") {
       await socket.request({ case: "createTable", value: {} });
@@ -184,7 +185,7 @@ async function main(): Promise<void> {
       ).tableId;
       return print(command === "status"
         ? { table: await socket.nextTable(tableId, 30_000, true) }
-        : await waitForTurn(socket, tableId, BigInt(values.after), Number(values.timeout)));
+        : await waitForTurn(socket, tableId, waitAfter!, Number(values.timeout)));
     }
     if (command === "say") {
       await socket.request({ case: "chat", value: { text: values.message! } });
@@ -212,6 +213,7 @@ type ClientPayload = NonNullable<Parameters<typeof create<typeof ClientFrameSche
 class PokerConnection {
   private readonly frames: ServerFrame[] = [];
   private sessionToken?: string;
+  private resumeAfter?: bigint;
   private waiting?: {
     accept: (frame: ServerFrame) => boolean;
     resolve: (frame: ServerFrame) => void;
@@ -230,6 +232,14 @@ class PokerConnection {
     socket.binaryType = "arraybuffer";
     socket.onmessage = (event) => {
       const frame = fromBinary(ServerFrameSchema, new Uint8Array(event.data as ArrayBuffer));
+      const seq = frame.payload.case === "event"
+        ? frame.payload.value.seq
+        : frame.payload.case === "tableSnapshot"
+          ? frame.payload.value.latestEventSeq
+          : undefined;
+      if (seq !== undefined && this.resumeAfter !== undefined && seq > this.resumeAfter) {
+        this.resumeAfter = seq;
+      }
       if (this.waiting?.accept(frame)) {
         const waiting = this.waiting;
         this.waiting = undefined;
@@ -262,8 +272,18 @@ class PokerConnection {
     return socket;
   }
 
-  async authenticate(sessionToken: string, timeout = 30_000): Promise<void> {
-    await this.request({ case: "authenticate", value: { sessionToken } }, timeout);
+  async authenticate(
+    sessionToken: string,
+    afterEventSeq?: bigint,
+    timeout = 30_000,
+  ): Promise<void> {
+    if (afterEventSeq !== undefined && (this.resumeAfter === undefined || afterEventSeq > this.resumeAfter)) {
+      this.resumeAfter = afterEventSeq;
+    }
+    await this.request({
+      case: "authenticate",
+      value: afterEventSeq === undefined ? { sessionToken } : { sessionToken, afterEventSeq },
+    }, timeout);
     this.sessionToken = sessionToken;
   }
 
@@ -335,7 +355,11 @@ class PokerConnection {
         const socket = await PokerConnection.connect(this.server);
         this.socket = socket;
         this.listen(socket);
-        await this.authenticate(this.sessionToken, Math.max(1, deadline - Date.now()));
+        await this.authenticate(
+          this.sessionToken,
+          this.resumeAfter,
+          Math.max(1, deadline - Date.now()),
+        );
         return;
       } catch (cause) {
         if (!(cause instanceof WebSocketDisconnected)) throw cause;
@@ -370,7 +394,7 @@ async function waitForTurn(
   timeoutMs: number,
 ): Promise<{ yourTurn: boolean; changed: boolean; table?: TableSnapshot; events: TableEvent[] }> {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) throw new Error("timeout must be a positive integer");
-  const events: TableEvent[] = [];
+  const events = new Map<bigint, TableEvent>();
   let table: TableSnapshot | undefined;
   while (true) {
     try {
@@ -379,19 +403,19 @@ async function waitForTurn(
         && candidate.payload.value.tableId === tableId
       ), timeoutMs, true);
       if (frame.payload.case === "event") {
-        events.push(frame.payload.value);
+        events.set(frame.payload.value.seq, frame.payload.value);
       } else if (frame.payload.case === "tableSnapshot") {
         table = frame.payload.value;
       }
       if (!table) continue;
       if (table.viewerQueuePosition > 0) continue;
       if (table.decisionId || table.latestEventSeq > afterEventSeq) {
-        return { yourTurn: Boolean(table.decisionId), changed: true, table, events };
+        return { yourTurn: Boolean(table.decisionId), changed: true, table, events: [...events.values()] };
       }
     } catch (cause) {
       if (table?.viewerQueuePosition) continue;
       if (cause instanceof Error && cause.message.startsWith("DEADLINE_EXCEEDED")) {
-        return { yourTurn: Boolean(table?.decisionId), changed: false, table, events };
+        return { yourTurn: Boolean(table?.decisionId), changed: false, table, events: [...events.values()] };
       }
       throw cause;
     }

@@ -27,7 +27,11 @@ message ClientFrame {
   }
 }
 
-message AuthenticateCommand { string session_token = 1; }
+message AuthenticateCommand {
+  string session_token = 1;
+  // Present only when an authenticated CLI wait resumes a table stream.
+  optional int64 after_event_seq = 2;
+}
 
 message SubscribeCommand {
   // Anonymous connections choose a lobby or table stream. Authenticated players

@@ -1,3 +1,4 @@
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import {
   PlayerViewSchema,
@@ -45,5 +46,20 @@ describe("generated ConnectRPC contract", () => {
     ]);
     expect(TableSnapshotSchema.fields.map((field) => field.name)).toContain("table_id");
     expect(TableEventSchema.fields.map((field) => field.name)).toContain("table_id");
+  });
+
+  it("carries an optional authenticated replay cursor", () => {
+    const encoded = toBinary(ClientFrameSchema, create(ClientFrameSchema, {
+      requestId: "resume",
+      payload: {
+        case: "authenticate",
+        value: { sessionToken: "token", afterEventSeq: 42n },
+      },
+    }));
+    const decoded = fromBinary(ClientFrameSchema, encoded);
+    expect(decoded.payload.case).toBe("authenticate");
+    if (decoded.payload.case === "authenticate") {
+      expect(decoded.payload.value.afterEventSeq).toBe(42n);
+    }
   });
 });

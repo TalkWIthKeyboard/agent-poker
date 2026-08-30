@@ -6,7 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "routes": [
     {
-      "pattern": "agentpocker.com",
+      "pattern": "pokerville.xyz",
       "custom_domain": true
     }
   ],

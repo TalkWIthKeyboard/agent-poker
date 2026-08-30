@@ -3,6 +3,7 @@ import { createConnectTransport } from "@connectrpc/connect-web";
 import { useEffect, useState, type CSSProperties } from "react";
 import { TableStatus, type TableSummary } from "../gen/poker/v1/entity_pb.js";
 import { PokerService } from "../gen/poker/v1/http_pb.js";
+import { SiteHeader } from "./site-header.js";
 import { subscribe } from "./websocket.js";
 
 const poker = createClient(PokerService, createConnectTransport({ baseUrl: location.origin }));
@@ -37,13 +38,11 @@ export function LobbyPage() {
 
   return (
     <main>
-      <header>
-        <div>
-          <p className="eyebrow">AGENT POKER · LOBBY</p>
-          <h1>Choose a table</h1>
-        </div>
-        <a className="page-link" href="/leaderboard">Leaderboard →</a>
-      </header>
+      <SiteHeader />
+      <div className="page-heading">
+        <p className="eyebrow">LIVE TABLES</p>
+        <h1>Choose a table</h1>
+      </div>
       {error ? <p className="leaderboard-message">{error}</p> : (
         <section className="lobby-grid" aria-label="Poker tables">
           {(tables ?? []).map((table) => (

@@ -1,6 +1,7 @@
 :root {
   color: #f5f0df;
   background: #0a0f0d;
+  scrollbar-color: #56645d #0a0f0d;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   font-synthesis: none;
 }
@@ -47,6 +48,11 @@ header {
 .page-link:hover { color: #f4df91; }
 .page-link:focus-visible { outline: 2px solid #d6bd67; outline-offset: 5px; }
 
+.github-link { width: 18px; height: 18px; color: #8f9f96; }
+.github-link:hover { color: #f5f0df; }
+.github-link:focus-visible { outline: 2px solid #d6bd67; outline-offset: 4px; }
+.github-link svg { display: block; width: 100%; fill: currentColor; }
+
 .eyebrow,
 .seat-number,
 .summary span,
@@ -63,6 +69,75 @@ h1 {
   line-height: 1;
   letter-spacing: -.045em;
 }
+
+.home {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-brand {
+  color: #f5f0df;
+  font: 700 15px/1 ui-monospace, monospace;
+  letter-spacing: .12em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.page-heading { margin-bottom: 24px; }
+.table-header { justify-content: flex-end; }
+
+.home-join {
+  width: min(760px, 100%);
+  margin: auto;
+  padding: 9vh 0 14vh;
+  text-align: center;
+}
+
+.home-join h1 {
+  margin: 0 0 24px;
+  font-size: clamp(48px, 7vw, 88px);
+}
+
+.home-intro {
+  max-width: 620px;
+  margin: 0 auto 42px;
+  color: #a9b6af;
+  font-size: clamp(17px, 2vw, 21px);
+  line-height: 1.65;
+}
+
+.join-steps {
+  display: grid;
+  grid-template-columns: 1fr;
+  border: 1px solid #27332d;
+  border-radius: 12px;
+  background: rgba(15, 21, 18, .85);
+  overflow: hidden;
+  text-align: left;
+}
+
+.join-steps article { min-width: 0; padding: 22px; }
+.join-steps article + article { border-top: 1px solid #27332d; }
+.join-steps span {
+  color: #8f9f96;
+  font: 600 10px/1.5 ui-monospace, monospace;
+  letter-spacing: .08em;
+}
+
+.join-steps pre {
+  margin: 16px 0 14px;
+  padding: 16px;
+  overflow-x: auto;
+  border: 1px solid #33423a;
+  border-radius: 8px;
+  color: #e7d792;
+  background: #090d0b;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.join-steps code { font: 12px/1.7 ui-monospace, monospace; }
 
 .lobby-grid {
   display: grid;
@@ -553,6 +628,8 @@ h1 {
   main { width: min(100% - 20px, 600px); padding-top: 18px; }
   header { align-items: flex-start; }
   .header-actions { align-items: flex-end; flex-direction: column; gap: 12px; }
+  .home-join { padding: 10vh 0; }
+  .home-join h1 { font-size: clamp(44px, 14vw, 68px); }
   .table {
     height: auto;
     padding: 170px 14px 18px;

@@ -3,6 +3,7 @@ import { createConnectTransport } from "@connectrpc/connect-web";
 import { useEffect, useState } from "react";
 import type { LeaderboardEntry } from "../gen/poker/v1/entity_pb.js";
 import { PokerService } from "../gen/poker/v1/http_pb.js";
+import { SiteHeader } from "./site-header.js";
 
 const poker = createClient(PokerService, createConnectTransport({ baseUrl: location.origin }));
 
@@ -19,13 +20,11 @@ export function LeaderboardPage() {
 
   return (
     <main>
-      <header>
-        <div>
-          <p className="eyebrow">AGENT POKER · LIFETIME POINTS</p>
-          <h1>Leaderboard</h1>
-        </div>
-        <a className="page-link" href="/">← Lobby</a>
-      </header>
+      <SiteHeader />
+      <div className="page-heading">
+        <p className="eyebrow">LIFETIME POINTS</p>
+        <h1>Leaderboard</h1>
+      </div>
 
       <section className="leaderboard">
         <div className="leaderboard-title">

@@ -7,6 +7,7 @@ import {
 } from "../gen/poker/v1/entity_pb.js";
 import type { TableEvent } from "../gen/poker/v1/event_pb.js";
 import { playerDisplayState, playerStateLabel } from "./player-state.js";
+import { SiteHeader } from "./site-header.js";
 import { subscribe } from "./websocket.js";
 
 export function TablePage() {
@@ -50,19 +51,7 @@ export function TablePage() {
   const playerNames = new Map(players.map((player) => [player.agentId, player.displayName]));
   return (
     <main>
-      <header>
-        <p className="eyebrow">AGENT POKER · LIVE TABLE</p>
-        <div className="header-actions">
-          <a className="page-link" href="/">Lobby →</a>
-          <a className="page-link" href="/leaderboard">Leaderboard →</a>
-          {connection !== "live" && (
-            <div className="connection">
-              <span />
-              {connection}
-            </div>
-          )}
-        </div>
-      </header>
+      <SiteHeader showBrand={false} status={connection === "live" ? undefined : connection} />
 
       <section className="summary">
         <div><span>Hand</span><strong>#{table?.handNumber || "—"}</strong></div>

@@ -189,11 +189,19 @@ export class PokerServer extends DurableObject<Env> {
       // the same connection. Browser WebSockets cannot set an Authorization
       // header, and putting the session token in the URL may expose it in logs.
       case "authenticate": {
-        const player = await this.players.authenticate(
-          frame.payload.value.sessionToken,
-        );
+        const command = frame.payload.value;
+        const player = await this.players.authenticate(command.sessionToken);
         const current = attachment(webSocket);
         const membership = this.lobbyRepository.membership(player.agent_id);
+        const table = membership
+          ? this.texasHoldem.table(membership.table_id, player.agent_id)
+          : undefined;
+        const after = command.afterEventSeq === undefined
+          ? undefined
+          : eventCursor(command.afterEventSeq);
+        if (after !== undefined && table && after > table.latestEventSeq) {
+          throw new DomainError("INVALID_ARGUMENT", "after_event_seq exceeds the current table sequence");
+        }
         webSocket.serializeAttachment({
           ...current,
           agentId: player.agent_id,
@@ -201,12 +209,17 @@ export class PokerServer extends DurableObject<Env> {
           tableId: membership?.table_id,
         });
         sendAck(webSocket, frame.requestId, "authenticate");
-        if (membership) {
-          sendTable(
-            webSocket,
-            membership.table_id,
-            this.texasHoldem.table(membership.table_id, player.agent_id),
-          );
+        if (membership && table) {
+          if (after !== undefined) {
+            let cursor = after;
+            while (true) {
+              const replayed = this.texasHoldem.replay(cursor, membership.table_id);
+              if (replayed.length === 0) break;
+              for (const event of replayed) sendEvent(webSocket, event);
+              cursor = replayed[replayed.length - 1].seq;
+            }
+          }
+          sendTable(webSocket, membership.table_id, table);
         }
         return;
       }
@@ -219,13 +232,7 @@ export class PokerServer extends DurableObject<Env> {
             "Authenticated players follow their table membership automatically",
           );
         }
-        const after = Number(command.afterEventSeq);
-        if (!Number.isSafeInteger(after) || after < 0) {
-          throw new DomainError(
-            "INVALID_ARGUMENT",
-            "after_event_seq must be a non-negative safe integer",
-          );
-        }
+        const after = eventCursor(command.afterEventSeq);
         if (command.tableId && !this.lobbyRepository.table(command.tableId)) {
           throw new DomainError("NOT_FOUND", "Table not found");
         }
@@ -454,4 +461,15 @@ export class PokerServer extends DurableObject<Env> {
       throw cause;
     }
   }
+}
+
+function eventCursor(value: bigint): number {
+  const cursor = Number(value);
+  if (!Number.isSafeInteger(cursor) || cursor < 0) {
+    throw new DomainError(
+      "INVALID_ARGUMENT",
+      "after_event_seq must be a non-negative safe integer",
+    );
+  }
+  return cursor;
 }
