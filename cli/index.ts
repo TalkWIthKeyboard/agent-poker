@@ -42,11 +42,10 @@ interface Session {
   expiresAt: number;
 }
 
-interface CliConfig {
-  server: string;
-}
-
 class WebSocketDisconnected extends Error {}
+
+const configDirectory = join(homedir(), ".pocker");
+const configFile = join(configDirectory, "config.json");
 
 const help = `Usage: poker [options] <command>
 
@@ -133,7 +132,10 @@ async function main(): Promise<void> {
   const poker = createClient(PokerService, transport(options.server));
   if (command === "config") {
     const response = await poker.getConfig({});
-    if (values.server) saveServerConfig(options.server);
+    if (values.server) {
+      mkdirSync(configDirectory, { recursive: true, mode: 0o700 });
+      writePrivateJson(configFile, { server: options.server });
+    }
     return print(response);
   }
   if (command === "tables") {
@@ -148,13 +150,11 @@ async function main(): Promise<void> {
     );
     return print(response);
   }
-  if (command === "membership") {
+  if (command === "membership" || command === "score") {
     const me = await withSession(options, (token) => poker.getMe({}, authorization(token)));
-    return print({ membership: me.membership });
-  }
-  if (command === "score") {
-    const me = await withSession(options, (token) => poker.getMe({}, authorization(token)));
-    return print({ score: me.player?.lifetimeScore ?? 0n });
+    return print(command === "membership"
+      ? { membership: me.membership }
+      : { score: me.player?.lifetimeScore ?? 0n });
   }
   const socket = await PokerConnection.open(options.server);
   try {
@@ -167,31 +167,27 @@ async function main(): Promise<void> {
       await socket.authenticate(sessionToken);
     }
     if (command === "create") {
-      await socket.request({ case: "createTable", value: {} }, "ack");
+      await socket.request({ case: "createTable", value: {} });
       return print({ tableId: (await socket.nextTable()).tableId });
     }
     if (command === "join") {
-      await socket.request({ case: "joinTable", value: { tableId: options.table } }, "ack");
+      await socket.request({ case: "joinTable", value: { tableId: options.table } });
       return print({ table: await socket.nextTable(options.table) });
     }
     if (command === "leave") {
-      await socket.request({ case: "leaveTable", value: {} }, "ack");
+      await socket.request({ case: "leaveTable", value: {} });
       return print({ left: true });
     }
-    if (command === "status") {
+    if (command === "status" || command === "wait") {
       const tableId = options.table || requireMembership(
         (await poker.getMe({}, authorization(sessionToken))).membership,
       ).tableId;
-      return print({ table: await socket.nextTable(tableId, 30_000, true) });
-    }
-    if (command === "wait") {
-      const tableId = options.table || requireMembership(
-        (await poker.getMe({}, authorization(sessionToken))).membership,
-      ).tableId;
-      return print(await waitForTurn(socket, tableId, BigInt(values.after), Number(values.timeout)));
+      return print(command === "status"
+        ? { table: await socket.nextTable(tableId, 30_000, true) }
+        : await waitForTurn(socket, tableId, BigInt(values.after), Number(values.timeout)));
     }
     if (command === "say") {
-      await socket.request({ case: "chat", value: { text: values.message! } }, "ack");
+      await socket.request({ case: "chat", value: { text: values.message! } });
       return print({ accepted: true });
     }
     if (command === "act") {
@@ -203,7 +199,7 @@ async function main(): Promise<void> {
           amount: BigInt(values.to),
           reason: values.reason,
         },
-      }, "ack");
+      });
       return print({ table: await socket.nextTable() });
     }
   } finally {
@@ -211,11 +207,7 @@ async function main(): Promise<void> {
   }
 }
 
-type ServerPayloadCase = Exclude<ServerFrame["payload"]["case"], undefined>;
 type ClientPayload = NonNullable<Parameters<typeof create<typeof ClientFrameSchema>>[1]>["payload"];
-type ServerFrameWith<C extends ServerPayloadCase> = ServerFrame & {
-  payload: Extract<ServerFrame["payload"], { case: C }>;
-};
 
 class PokerConnection {
   private readonly frames: ServerFrame[] = [];
@@ -271,31 +263,29 @@ class PokerConnection {
   }
 
   async authenticate(sessionToken: string, timeout = 30_000): Promise<void> {
-    await this.request({ case: "authenticate", value: { sessionToken } }, "ack", timeout);
+    await this.request({ case: "authenticate", value: { sessionToken } }, timeout);
     this.sessionToken = sessionToken;
   }
 
-  async request<C extends ServerPayloadCase>(
+  async request(
     payload: ClientPayload,
-    expected: C,
     timeout = 30_000,
-  ): Promise<ServerFrameWith<C>> {
+  ): Promise<void> {
     const requestId = crypto.randomUUID();
     this.socket.send(toBinary(ClientFrameSchema, create(ClientFrameSchema, { requestId, payload })));
     const frame = await this.next((candidate) => (
       candidate.requestId === requestId
-      && (candidate.payload.case === expected || candidate.payload.case === "error")
+      && (candidate.payload.case === "ack" || candidate.payload.case === "error")
     ), timeout);
     if (frame.payload.case === "error") {
       throw new Error(`${frame.payload.value.code}: ${frame.payload.value.message}`);
     }
-    return frame as ServerFrameWith<C>;
   }
 
   nextTable(tableId = "", timeout = 30_000, reconnect = false): Promise<TableSnapshot> {
     return this.next((frame) => (
       frame.payload.case === "tableSnapshot" && (!tableId || frame.payload.value.tableId === tableId)
-    ), timeout, reconnect).then((frame) => (frame as ServerFrameWith<"tableSnapshot">).payload.value);
+    ), timeout, reconnect).then((frame) => frame.payload.value as TableSnapshot);
   }
 
   async next(
@@ -425,29 +415,19 @@ async function withSession<T>(options: Options, operation: (token: string) => Pr
   }
 }
 
-function configPath(): string {
-  return join(homedir(), ".pocker", "config.json");
-}
-
 function loadServerConfig(): string | undefined {
-  const path = configPath();
-  if (!existsSync(path)) return undefined;
+  if (!existsSync(configFile)) return undefined;
   let config: unknown;
   try {
-    config = JSON.parse(readFileSync(path, "utf8"));
+    config = JSON.parse(readFileSync(configFile, "utf8"));
   } catch {
-    throw new Error(`invalid JSON in ${path}`);
+    throw new Error(`invalid JSON in ${configFile}`);
   }
-  if (!config || typeof config !== "object" || typeof (config as Partial<CliConfig>).server !== "string") {
-    throw new Error(`missing server in ${path}`);
-  }
-  return normalizeServer((config as CliConfig).server);
-}
-
-function saveServerConfig(server: string): void {
-  const path = configPath();
-  mkdirSync(join(homedir(), ".pocker"), { recursive: true, mode: 0o700 });
-  writePrivateJson(path, { server });
+  const server = config && typeof config === "object" && "server" in config
+    ? config.server
+    : undefined;
+  if (typeof server !== "string") throw new Error(`missing server in ${configFile}`);
+  return normalizeServer(server);
 }
 
 function normalizeServer(value: string): string {
