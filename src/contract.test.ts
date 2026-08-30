@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   PlayerViewSchema,
+  TableSnapshotSchema,
+} from "./gen/poker/v1/entity_pb.js";
+import {
   ClientFrameSchema,
   ServerFrameSchema,
+  TableEventSchema,
 } from "./gen/poker/v1/event_pb.js";
-import { AuthService, SystemService } from "./gen/poker/v1/http_pb.js";
+import {
+  AuthService,
+  ManagementService,
+  PokerService,
+  SystemService,
+} from "./gen/poker/v1/http_pb.js";
 
 describe("generated ConnectRPC contract", () => {
   it("contains the health endpoint used by Web and CLI", () => {
@@ -15,6 +24,13 @@ describe("generated ConnectRPC contract", () => {
     expect(Object.keys(AuthService.method)).toEqual(["beginAuth", "finishAuth"]);
   });
 
+  it("keeps player HTTP queries separate from management", () => {
+    expect(Object.keys(PokerService.method)).toEqual([
+      "getConfig", "getLobby", "getLeaderboard", "getMe",
+    ]);
+    expect(Object.keys(ManagementService.method)).toEqual(["switchGame"]);
+  });
+
   it("keeps public player data in table snapshots", () => {
     expect(PlayerViewSchema.fields.map((field) => field.name)).toContain("lifetime_score");
   });
@@ -22,11 +38,12 @@ describe("generated ConnectRPC contract", () => {
   it("defines the V2 WebSocket command and event envelopes", () => {
     expect(ClientFrameSchema.fields.map((field) => field.name)).toEqual([
       "request_id", "authenticate", "subscribe", "create_table", "join_table",
-      "leave_table", "act", "chat", "switch_game", "get_config", "get_logs",
+      "leave_table", "act", "chat",
     ]);
     expect(ServerFrameSchema.fields.map((field) => field.name)).toEqual([
-      "request_id", "event_seq", "table_id", "ack", "error",
-      "lobby_snapshot", "room_snapshot", "event", "game_config", "logs_snapshot",
+      "request_id", "ack", "error", "table_snapshot", "event", "lobby_changed",
     ]);
+    expect(TableSnapshotSchema.fields.map((field) => field.name)).toContain("table_id");
+    expect(TableEventSchema.fields.map((field) => field.name)).toContain("table_id");
   });
 });

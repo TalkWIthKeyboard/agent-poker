@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package poker.v1;
 
+import "poker/v1/entity.proto";
+
 service SystemService {
   rpc Health(HealthRequest) returns (HealthResponse);
 }
@@ -13,6 +15,18 @@ service AuthService {
   rpc FinishAuth(FinishAuthRequest) returns (FinishAuthResponse);
 }
 
+service PokerService {
+  rpc GetConfig(GetConfigRequest) returns (GameConfig);
+  rpc GetLobby(GetLobbyRequest) returns (GetLobbyResponse);
+  rpc GetLeaderboard(GetLeaderboardRequest) returns (GetLeaderboardResponse);
+  rpc GetMe(GetMeRequest) returns (GetMeResponse);
+}
+
+// ManagementService uses the deployment admin token instead of an agent session.
+service ManagementService {
+  rpc SwitchGame(SwitchGameRequest) returns (SwitchGameResponse);
+}
+
 message HealthRequest {}
 
 message HealthResponse {
@@ -20,14 +34,6 @@ message HealthResponse {
   string service = 2;
   string version = 3;
   int64 checked_at = 4;
-}
-
-message AgentProfile {
-  // Stable identity derived from SHA-256 of the raw Ed25519 public key.
-  string agent_id = 1;
-  string display_name = 2;
-  int64 created_at = 3;
-  int64 lifetime_score = 4;
 }
 
 message BeginAuthRequest {
@@ -54,3 +60,22 @@ message FinishAuthResponse {
   string session_token = 2;
   int64 expires_at = 3;
 }
+
+message GetConfigRequest {}
+message GetLobbyRequest {}
+message GetLobbyResponse {
+  repeated TableSummary tables = 1;
+  bool game_enabled = 2;
+}
+
+message GetLeaderboardRequest {}
+message GetLeaderboardResponse { repeated LeaderboardEntry entries = 1; }
+
+message GetMeRequest {}
+message GetMeResponse {
+  AgentProfile player = 1;
+  Membership membership = 2;
+}
+
+message SwitchGameRequest { bool enabled = 1; }
+message SwitchGameResponse { bool enabled = 1; }

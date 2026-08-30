@@ -1,11 +1,11 @@
-type RoomRow = {
-  room_id: string;
+type TableRow = {
+  table_id: string;
   display_name: string;
 };
 
 type MembershipRow = {
   agent_id: string;
-  room_id: string;
+  table_id: string;
   status: "SEATED" | "QUEUED";
 };
 
@@ -18,7 +18,7 @@ export class LobbyRepository {
     ).one().enabled === 1;
   }
 
-  setGameEnabled(enabled: boolean, now: number): void {
+  switchGame(enabled: boolean, now: number): void {
     this.storage.sql.exec(
       "UPDATE game SET enabled = ?, updated_at = ? WHERE id = 1",
       enabled ? 1 : 0,
@@ -26,27 +26,27 @@ export class LobbyRepository {
     );
   }
 
-  rooms(): RoomRow[] {
-    return this.storage.sql.exec<RoomRow>(
-      `SELECT room_id, display_name
-       FROM rooms ORDER BY created_at, room_id`,
+  tables(): TableRow[] {
+    return this.storage.sql.exec<TableRow>(
+      `SELECT table_id, display_name
+       FROM tables ORDER BY created_at, table_id`,
     ).toArray();
   }
 
-  room(roomId: string): RoomRow | undefined {
-    return this.storage.sql.exec<RoomRow>(
-      `SELECT room_id, display_name
-       FROM rooms WHERE room_id = ?`,
-      roomId,
+  table(tableId: string): TableRow | undefined {
+    return this.storage.sql.exec<TableRow>(
+      `SELECT table_id, display_name
+       FROM tables WHERE table_id = ?`,
+      tableId,
     ).toArray()[0];
   }
 
-  insertRoom(roomId: string, displayName: string, creatorAgentId: string, now: number): void {
+  insertTable(tableId: string, displayName: string, creatorAgentId: string, now: number): void {
     this.storage.sql.exec(
-      `INSERT INTO rooms
-       (room_id, display_name, created_by_agent_id, created_at, updated_at)
+      `INSERT INTO tables
+       (table_id, display_name, created_by_agent_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?)`,
-      roomId,
+      tableId,
       displayName,
       creatorAgentId,
       now,
@@ -56,31 +56,24 @@ export class LobbyRepository {
 
   membership(agentId: string): MembershipRow | undefined {
     return this.storage.sql.exec<MembershipRow>(
-      "SELECT agent_id, room_id, status FROM memberships WHERE agent_id = ?",
+      "SELECT agent_id, table_id, status FROM memberships WHERE agent_id = ?",
       agentId,
     ).toArray()[0];
   }
 
-  membershipsForRoom(roomId: string): MembershipRow[] {
-    return this.storage.sql.exec<MembershipRow>(
-      "SELECT agent_id, room_id, status FROM memberships WHERE room_id = ?",
-      roomId,
-    ).toArray();
-  }
-
   setMembership(
     agentId: string,
-    roomId: string,
+    tableId: string,
     status: MembershipRow["status"],
     now: number,
   ): void {
     this.storage.sql.exec(
-      `INSERT INTO memberships (agent_id, room_id, status, created_at, updated_at)
+      `INSERT INTO memberships (agent_id, table_id, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(agent_id) DO UPDATE SET
-         room_id = excluded.room_id, status = excluded.status, updated_at = excluded.updated_at`,
+         table_id = excluded.table_id, status = excluded.status, updated_at = excluded.updated_at`,
       agentId,
-      roomId,
+      tableId,
       status,
       now,
       now,
@@ -91,10 +84,48 @@ export class LobbyRepository {
     this.storage.sql.exec("DELETE FROM memberships WHERE agent_id = ?", agentId);
   }
 
+  syncMemberships(
+    tableIds: string[],
+    memberships: Array<{
+      agentId: string;
+      tableId: string;
+      status: MembershipRow["status"];
+    }>,
+    now: number,
+  ): void {
+    if (tableIds.length === 0) return;
+    const expected = JSON.stringify(memberships);
+    // Timeout processing can remove players from a table, so delete stale membership rows
+    // that are absent from the latest game state before upserting the current memberships.
+    this.storage.sql.exec(
+      `DELETE FROM memberships
+       WHERE table_id IN (SELECT value FROM json_each(?))
+         AND NOT EXISTS (
+           SELECT 1 FROM json_each(?)
+           WHERE json_extract(value, '$.agentId') = memberships.agent_id
+             AND json_extract(value, '$.tableId') = memberships.table_id
+         )`,
+      JSON.stringify(tableIds),
+      expected,
+    );
+    this.storage.sql.exec(
+      `INSERT INTO memberships (agent_id, table_id, status, created_at, updated_at)
+       SELECT json_extract(value, '$.agentId'),
+              json_extract(value, '$.tableId'),
+              json_extract(value, '$.status'), ?, ?
+       FROM json_each(?) WHERE true
+       ON CONFLICT(agent_id) DO UPDATE SET
+         table_id = excluded.table_id, status = excluded.status, updated_at = excluded.updated_at`,
+      now,
+      now,
+      expected,
+    );
+  }
+
   clearTables(): void {
     this.storage.sql.exec("DELETE FROM memberships");
-    this.storage.sql.exec("DELETE FROM game_events WHERE room_id IS NOT NULL");
-    this.storage.sql.exec("DELETE FROM room_states");
-    this.storage.sql.exec("DELETE FROM rooms");
+    this.storage.sql.exec("DELETE FROM game_events WHERE table_id IS NOT NULL");
+    this.storage.sql.exec("DELETE FROM table_states");
+    this.storage.sql.exec("DELETE FROM tables");
   }
 }

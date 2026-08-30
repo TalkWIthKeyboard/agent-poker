@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { ConnectError, createClient } from "@connectrpc/connect";
+import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
 import { createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -11,15 +11,17 @@ import { parseArgs } from "node:util";
 import packageJson from "../package.json";
 import {
   ActionType,
+  type Membership,
+  type TableSnapshot,
+} from "../src/gen/poker/v1/entity_pb.js";
+import {
   ClientFrameSchema,
   ServerFrameSchema,
   type ClientFrame,
-  type LobbySnapshot,
-  type RoomEvent,
-  type RoomSnapshot,
+  type TableEvent,
   type ServerFrame,
 } from "../src/gen/poker/v1/event_pb.js";
-import { AuthService } from "../src/gen/poker/v1/http_pb.js";
+import { AuthService, ManagementService, PokerService } from "../src/gen/poker/v1/http_pb.js";
 
 interface Options {
   server: string;
@@ -44,6 +46,8 @@ interface CliConfig {
   server: string;
 }
 
+class WebSocketDisconnected extends Error {}
+
 const help = `Usage: poker [options] <command>
 
 Commands:
@@ -55,7 +59,6 @@ Commands:
   leave  Fold immediately and leave after the hand
   status
   score
-  logs [--before <id>] [--limit <count>]
   wait [--after <seq>] [--timeout <ms>]
   say --message <text>
   act <fold|check|call|raise> --decision <id> [--to <amount>] [--reason <text>]
@@ -91,8 +94,6 @@ async function main(): Promise<void> {
       name: { type: "string", default: process.env.POKER_NAME },
       table: { type: "string", short: "t", default: process.env.POKER_TABLE_ID ?? "" },
       after: { type: "string", default: "0" },
-      before: { type: "string", default: "0" },
-      limit: { type: "string", default: "20" },
       timeout: { type: "string", default: "25000" },
       decision: { type: "string", short: "d" },
       to: { type: "string", default: "0" },
@@ -109,7 +110,7 @@ async function main(): Promise<void> {
   const [command, actionName, ...extra] = positionals;
   if (extra.length > 0) throw new Error(`unexpected argument: ${extra[0]}`);
   if (command !== "act" && actionName) throw new Error(`unexpected argument: ${actionName}`);
-  if (!["config", "tables", "create", "membership", "join", "leave", "status", "score", "logs", "wait", "say", "act", "start", "stop"].includes(command)) {
+  if (!["config", "tables", "create", "membership", "join", "leave", "status", "score", "wait", "say", "act", "start", "stop"].includes(command)) {
     throw new Error(`unknown command: ${command}`);
   }
   if (command === "act" && !actionName) throw new Error("missing action");
@@ -129,64 +130,64 @@ async function main(): Promise<void> {
     name: values.name,
     table: values.table,
   };
+  const poker = createClient(PokerService, transport(options.server));
+  if (command === "config") {
+    const response = await poker.getConfig({});
+    if (values.server) saveServerConfig(options.server);
+    return print(response);
+  }
+  if (command === "tables") {
+    return print({ tables: (await poker.getLobby({})).tables });
+  }
+  if (command === "start" || command === "stop") {
+    const adminToken = process.env.POKER_ADMIN_TOKEN;
+    if (!adminToken) throw new Error("POKER_ADMIN_TOKEN is required");
+    const response = await createClient(ManagementService, transport(options.server)).switchGame(
+      { enabled: command === "start" },
+      { headers: { "X-Admin-Token": adminToken } },
+    );
+    return print(response);
+  }
+  if (command === "membership") {
+    const me = await withSession(options, (token) => poker.getMe({}, authorization(token)));
+    return print({ membership: me.membership });
+  }
+  if (command === "score") {
+    const me = await withSession(options, (token) => poker.getMe({}, authorization(token)));
+    return print({ score: me.player?.lifetimeScore ?? 0n });
+  }
   const socket = await PokerConnection.open(options.server);
   try {
-    if (command === "config") {
-      const response = await socket.request({ case: "getConfig", value: {} }, "gameConfig");
-      if (values.server) saveServerConfig(options.server);
-      return print(response.payload.value);
-    }
-    if (command === "tables") {
-      return print({ tables: (await subscribeLobby(socket)).tables });
-    }
-    if (command === "start" || command === "stop") {
-      const adminToken = process.env.POKER_ADMIN_TOKEN;
-      if (!adminToken) throw new Error("POKER_ADMIN_TOKEN is required");
-      await socket.request({
-        case: "switchGame",
-        value: { enabled: command === "start", adminToken },
-      }, "ack");
-      return print({ enabled: command === "start" });
-    }
-
+    let sessionToken = await authenticate(options);
     try {
-      await socket.authenticate(await authenticate(options));
+      await socket.authenticate(sessionToken);
     } catch (cause) {
       if (!(cause instanceof Error) || !cause.message.startsWith("UNAUTHENTICATED:")) throw cause;
-      await socket.authenticate(await authenticate(options, true));
+      sessionToken = await authenticate(options, true);
+      await socket.authenticate(sessionToken);
     }
     if (command === "create") {
-      const response = await socket.request({ case: "createTable", value: {} }, "ack");
-      return print({ tableId: response.tableId });
-    }
-    if (command === "membership") {
-      return print({ membership: (await subscribeLobby(socket)).membership });
+      await socket.request({ case: "createTable", value: {} }, "ack");
+      return print({ tableId: (await socket.nextTable()).tableId });
     }
     if (command === "join") {
       await socket.request({ case: "joinTable", value: { tableId: options.table } }, "ack");
-      return print({ room: await socket.nextRoom(options.table) });
+      return print({ table: await socket.nextTable(options.table) });
     }
     if (command === "leave") {
       await socket.request({ case: "leaveTable", value: {} }, "ack");
       return print({ left: true });
     }
     if (command === "status") {
-      const tableId = options.table || requireMembership(await subscribeLobby(socket)).tableId;
-      return print({ room: await subscribeTable(socket, tableId, 0n) });
-    }
-    if (command === "score") {
-      const lobby = await subscribeLobby(socket);
-      return print({ score: lobby.player?.lifetimeScore ?? 0n });
-    }
-    if (command === "logs") {
-      const response = await socket.request({
-        case: "getLogs",
-        value: { beforeId: BigInt(values.before), limit: Number(values.limit) },
-      }, "logsSnapshot");
-      return print(response.payload.value);
+      const tableId = options.table || requireMembership(
+        (await poker.getMe({}, authorization(sessionToken))).membership,
+      ).tableId;
+      return print({ table: await socket.nextTable(tableId, 30_000, true) });
     }
     if (command === "wait") {
-      const tableId = options.table || requireMembership(await subscribeLobby(socket)).tableId;
+      const tableId = options.table || requireMembership(
+        (await poker.getMe({}, authorization(sessionToken))).membership,
+      ).tableId;
       return print(await waitForTurn(socket, tableId, BigInt(values.after), Number(values.timeout)));
     }
     if (command === "say") {
@@ -203,7 +204,7 @@ async function main(): Promise<void> {
           reason: values.reason,
         },
       }, "ack");
-      return print({ room: await socket.nextRoom() });
+      return print({ table: await socket.nextTable() });
     }
   } finally {
     socket.close();
@@ -218,6 +219,7 @@ type ServerFrameWith<C extends ServerPayloadCase> = ServerFrame & {
 
 class PokerConnection {
   private readonly frames: ServerFrame[] = [];
+  private sessionToken?: string;
   private waiting?: {
     accept: (frame: ServerFrame) => boolean;
     resolve: (frame: ServerFrame) => void;
@@ -225,7 +227,14 @@ class PokerConnection {
     timer: ReturnType<typeof setTimeout>;
   };
 
-  private constructor(private readonly socket: WebSocket) {
+  private constructor(
+    private readonly server: string,
+    private socket: WebSocket,
+  ) {
+    this.listen(socket);
+  }
+
+  private listen(socket: WebSocket): void {
     socket.binaryType = "arraybuffer";
     socket.onmessage = (event) => {
       const frame = fromBinary(ServerFrameSchema, new Uint8Array(event.data as ArrayBuffer));
@@ -238,48 +247,77 @@ class PokerConnection {
         this.frames.push(frame);
       }
     };
-    socket.onclose = () => this.fail(new Error("WebSocket closed"));
-    socket.onerror = () => this.fail(new Error("WebSocket connection failed"));
+    socket.onclose = () => {
+      if (socket === this.socket) this.fail(new WebSocketDisconnected("WebSocket closed"));
+    };
+    socket.onerror = () => {
+      if (socket === this.socket) this.fail(new WebSocketDisconnected("WebSocket connection failed"));
+    };
   }
 
   static async open(server: string): Promise<PokerConnection> {
+    return new PokerConnection(server, await PokerConnection.connect(server));
+  }
+
+  private static async connect(server: string): Promise<WebSocket> {
     const url = new URL("/ws", server);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     const socket = new WebSocket(url);
     await new Promise<void>((resolve, reject) => {
       socket.onopen = () => resolve();
-      socket.onerror = () => reject(new Error(`Could not connect to ${url}`));
+      socket.onerror = () => reject(new WebSocketDisconnected(`Could not connect to ${url}`));
     });
-    return new PokerConnection(socket);
+    return socket;
   }
 
-  async authenticate(sessionToken: string): Promise<void> {
-    await this.request({ case: "authenticate", value: { sessionToken } }, "ack");
+  async authenticate(sessionToken: string, timeout = 30_000): Promise<void> {
+    await this.request({ case: "authenticate", value: { sessionToken } }, "ack", timeout);
+    this.sessionToken = sessionToken;
   }
 
   async request<C extends ServerPayloadCase>(
     payload: ClientPayload,
     expected: C,
+    timeout = 30_000,
   ): Promise<ServerFrameWith<C>> {
     const requestId = crypto.randomUUID();
     this.socket.send(toBinary(ClientFrameSchema, create(ClientFrameSchema, { requestId, payload })));
     const frame = await this.next((candidate) => (
       candidate.requestId === requestId
       && (candidate.payload.case === expected || candidate.payload.case === "error")
-    ));
+    ), timeout);
     if (frame.payload.case === "error") {
       throw new Error(`${frame.payload.value.code}: ${frame.payload.value.message}`);
     }
     return frame as ServerFrameWith<C>;
   }
 
-  nextRoom(tableId = "", timeout = 30_000): Promise<RoomSnapshot> {
+  nextTable(tableId = "", timeout = 30_000, reconnect = false): Promise<TableSnapshot> {
     return this.next((frame) => (
-      frame.payload.case === "roomSnapshot" && (!tableId || frame.tableId === tableId)
-    ), timeout).then((frame) => (frame as ServerFrameWith<"roomSnapshot">).payload.value);
+      frame.payload.case === "tableSnapshot" && (!tableId || frame.payload.value.tableId === tableId)
+    ), timeout, reconnect).then((frame) => (frame as ServerFrameWith<"tableSnapshot">).payload.value);
   }
 
-  next(accept: (frame: ServerFrame) => boolean, timeout = 30_000): Promise<ServerFrame> {
+  async next(
+    accept: (frame: ServerFrame) => boolean,
+    timeout = 30_000,
+    reconnect = false,
+  ): Promise<ServerFrame> {
+    const deadline = Date.now() + timeout;
+    while (true) {
+      if (reconnect && this.socket.readyState !== WebSocket.OPEN) {
+        await this.reconnect(deadline);
+      }
+      try {
+        return await this.nextFrame(accept, Math.max(1, deadline - Date.now()));
+      } catch (cause) {
+        if (!reconnect || !(cause instanceof WebSocketDisconnected)) throw cause;
+        await this.reconnect(deadline);
+      }
+    }
+  }
+
+  private nextFrame(accept: (frame: ServerFrame) => boolean, timeout: number): Promise<ServerFrame> {
     const index = this.frames.findIndex(accept);
     if (index >= 0) return Promise.resolve(this.frames.splice(index, 1)[0]);
     if (this.waiting) throw new Error("Only one WebSocket response may be awaited at a time");
@@ -296,6 +334,27 @@ class PokerConnection {
     });
   }
 
+  private async reconnect(deadline: number): Promise<void> {
+    if (!this.sessionToken) throw new WebSocketDisconnected("WebSocket closed before authentication");
+    this.socket.close();
+    let lastError = new WebSocketDisconnected("Could not reconnect WebSocket");
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(1_000, deadline - Date.now())));
+      if (Date.now() >= deadline) break;
+      try {
+        const socket = await PokerConnection.connect(this.server);
+        this.socket = socket;
+        this.listen(socket);
+        await this.authenticate(this.sessionToken, Math.max(1, deadline - Date.now()));
+        return;
+      } catch (cause) {
+        if (!(cause instanceof WebSocketDisconnected)) throw cause;
+        lastError = cause;
+      }
+    }
+    throw lastError;
+  }
+
   close(): void {
     this.socket.close();
   }
@@ -309,23 +368,9 @@ class PokerConnection {
   }
 }
 
-async function subscribeLobby(socket: PokerConnection): Promise<LobbySnapshot> {
-  await socket.request({ case: "subscribe", value: { lobby: true } }, "ack");
-  const frame = await socket.next((candidate) => candidate.payload.case === "lobbySnapshot");
-  return (frame as ServerFrameWith<"lobbySnapshot">).payload.value;
-}
-
-async function subscribeTable(socket: PokerConnection, tableId: string, afterEventSeq: bigint): Promise<RoomSnapshot> {
-  await socket.request({
-    case: "subscribe",
-    value: { tableId, afterEventSeq },
-  }, "ack");
-  return socket.nextRoom(tableId);
-}
-
-function requireMembership(lobby: LobbySnapshot) {
-  if (!lobby.membership) throw new Error("FAILED_PRECONDITION: Player is not seated or queued");
-  return lobby.membership;
+function requireMembership(membership: Membership | undefined) {
+  if (!membership) throw new Error("FAILED_PRECONDITION: Player is not seated or queued");
+  return membership;
 }
 
 async function waitForTurn(
@@ -333,35 +378,30 @@ async function waitForTurn(
   tableId: string,
   afterEventSeq: bigint,
   timeoutMs: number,
-): Promise<{ yourTurn: boolean; changed: boolean; room?: RoomSnapshot; events: RoomEvent[] }> {
+): Promise<{ yourTurn: boolean; changed: boolean; table?: TableSnapshot; events: TableEvent[] }> {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) throw new Error("timeout must be a positive integer");
-  await socket.request({
-    case: "subscribe",
-    value: { tableId, afterEventSeq },
-  }, "ack");
-  const events: RoomEvent[] = [];
-  let room: RoomSnapshot | undefined;
+  const events: TableEvent[] = [];
+  let table: TableSnapshot | undefined;
   while (true) {
     try {
       const frame = await socket.next((candidate) => (
-        candidate.tableId === tableId
-        && (candidate.payload.case === "event" || candidate.payload.case === "roomSnapshot")
-      ), timeoutMs);
+        (candidate.payload.case === "event" || candidate.payload.case === "tableSnapshot")
+        && candidate.payload.value.tableId === tableId
+      ), timeoutMs, true);
       if (frame.payload.case === "event") {
         events.push(frame.payload.value);
-        room = frame.payload.value.room;
-      } else if (frame.payload.case === "roomSnapshot") {
-        room = frame.payload.value;
+      } else if (frame.payload.case === "tableSnapshot") {
+        table = frame.payload.value;
       }
-      if (!room) continue;
-      if (room.viewerQueuePosition > 0) continue;
-      if (room.decisionId || room.latestEventSeq > afterEventSeq) {
-        return { yourTurn: Boolean(room.decisionId), changed: true, room, events };
+      if (!table) continue;
+      if (table.viewerQueuePosition > 0) continue;
+      if (table.decisionId || table.latestEventSeq > afterEventSeq) {
+        return { yourTurn: Boolean(table.decisionId), changed: true, table, events };
       }
     } catch (cause) {
-      if (room?.viewerQueuePosition) continue;
+      if (table?.viewerQueuePosition) continue;
       if (cause instanceof Error && cause.message.startsWith("DEADLINE_EXCEEDED")) {
-        return { yourTurn: Boolean(room?.decisionId), changed: false, room, events };
+        return { yourTurn: Boolean(table?.decisionId), changed: false, table, events };
       }
       throw cause;
     }
@@ -370,6 +410,19 @@ async function waitForTurn(
 
 function transport(server: string) {
   return createConnectTransport({ baseUrl: server, httpVersion: "1.1" });
+}
+
+function authorization(token: string) {
+  return { headers: { Authorization: `Bearer ${token}` } };
+}
+
+async function withSession<T>(options: Options, operation: (token: string) => Promise<T>): Promise<T> {
+  try {
+    return await operation(await authenticate(options));
+  } catch (cause) {
+    if (!(cause instanceof ConnectError) || cause.code !== Code.Unauthenticated) throw cause;
+    return operation(await authenticate(options, true));
+  }
 }
 
 function configPath(): string {

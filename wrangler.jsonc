@@ -23,6 +23,8 @@
     "run_worker_first": [
       "/poker.v1.SystemService/*",
       "/poker.v1.AuthService/*",
+      "/poker.v1.PokerService/*",
+      "/poker.v1.ManagementService/*",
       "/ws"
     ]
   },
