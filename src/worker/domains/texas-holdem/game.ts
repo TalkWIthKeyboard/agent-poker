@@ -1,8 +1,8 @@
 import { evaluate, rank, rankDescription } from "@pokertools/evaluator";
-import { GAME_CONFIG } from "./config.js";
+import { GAME_CONFIG } from "../../../config.js";
 
 export type GameAction = "fold" | "check" | "call" | "raise";
-export type GameStatus = "WAITING" | "PLAYING" | "COMPLETE";
+export type GameStatus = "WAITING" | "PLAYING";
 export type GameStreet = "PREFLOP" | "FLOP" | "TURN" | "RIVER" | "SHOWDOWN";
 
 export interface GamePlayer {
@@ -28,19 +28,16 @@ export interface Decision {
 export interface WaitingPlayer {
   agentId: string;
   displayName: string;
-  stack?: number;
+  stack: number;
 }
 
 export interface GameState {
-  schemaVersion: 1;
   status: GameStatus;
-  matchId: string;
   handNumber: number;
   street: GameStreet;
   dealerSeat: number;
   community: number[];
   deck: number[];
-  deckCursor: number;
   currentBet: number;
   minRaise: number;
   players: GamePlayer[];
@@ -50,7 +47,6 @@ export interface GameState {
   eventSeq: number;
   result: string;
   lastRevealed: Record<string, number[]>;
-  paused: boolean;
 }
 
 export interface GameEvent {
@@ -69,15 +65,12 @@ export interface LegalActions {
 
 export function emptyGame(): GameState {
   return {
-    schemaVersion: 1,
     status: "WAITING",
-    matchId: "",
     handNumber: 0,
     street: "PREFLOP",
     dealerSeat: -1,
     community: [],
     deck: [],
-    deckCursor: 0,
     currentBet: 0,
     minRaise: GAME_CONFIG.bigBlind,
     players: [],
@@ -87,7 +80,6 @@ export function emptyGame(): GameState {
     eventSeq: 0,
     result: "",
     lastRevealed: {},
-    paused: false,
   };
 }
 
@@ -106,7 +98,6 @@ export function startMatch(
   seatedPlayers: Array<WaitingPlayer & Pick<GamePlayer, "seat">>,
   deck: number[],
   now: number,
-  matchId: string,
   decisionId: string,
 ): { state: GameState; events: GameEvent[] } {
   if (seatedPlayers.length !== GAME_CONFIG.playerCount) {
@@ -114,8 +105,7 @@ export function startMatch(
   }
   const state = emptyGame();
   state.status = "PLAYING";
-  state.matchId = matchId;
-  state.players = seatedPlayers.map((player) => newPlayer(player, player.seat));
+  state.players = seatedPlayers.map((player) => seatPlayer(player, player.seat));
   const events: GameEvent[] = [{
     kind: "MATCH_STARTED",
     message: `${GAME_CONFIG.playerCount} players joined. Match started.`,
@@ -157,7 +147,7 @@ export function refillTable(current: GameState): { state: GameState; events: Gam
   for (const seat of openSeats) {
     const waiting = state.waitingPlayers.shift();
     if (!waiting) break;
-    state.players.push(newPlayer(waiting, seat));
+    state.players.push(seatPlayer(waiting, seat));
     events.push({
       kind: "PLAYER_SEATED",
       agentId: waiting.agentId,
@@ -171,7 +161,6 @@ export function refillTable(current: GameState): { state: GameState; events: Gam
     state.street = "PREFLOP";
     state.community = [];
     state.deck = [];
-    state.deckCursor = 0;
     state.currentBet = 0;
     state.minRaise = GAME_CONFIG.bigBlind;
     state.decision = null;
@@ -337,7 +326,6 @@ function startHand(
     : nextActiveSeat(state, state.dealerSeat);
   state.community = [];
   state.deck = deck;
-  state.deckCursor = 0;
   state.currentBet = 0;
   state.minRaise = GAME_CONFIG.bigBlind;
   state.decision = null;
@@ -359,17 +347,13 @@ function startHand(
     for (const seat of dealOrder) playerAt(state, seat).hole.push(draw(state));
   }
 
-  const smallBlindSeat = active.length === 2
-    ? state.dealerSeat
-    : nextActiveSeat(state, state.dealerSeat);
+  const smallBlindSeat = nextActiveSeat(state, state.dealerSeat);
   const bigBlindSeat = nextActiveSeat(state, smallBlindSeat);
   moveChips(playerAt(state, smallBlindSeat), GAME_CONFIG.smallBlind);
   moveChips(playerAt(state, bigBlindSeat), GAME_CONFIG.bigBlind);
   state.currentBet = GAME_CONFIG.bigBlind;
 
-  const firstToAct = active.length === 2
-    ? smallBlindSeat
-    : nextActiveSeat(state, bigBlindSeat);
+  const firstToAct = nextActiveSeat(state, bigBlindSeat);
   openDecision(
     state,
     nextSeatNeedingAction(
@@ -483,11 +467,11 @@ function finishHand(
   });
 }
 
-function newPlayer(player: WaitingPlayer, seat: number): GamePlayer {
+export function seatPlayer(player: WaitingPlayer, seat: number): GamePlayer {
   return {
     ...player,
     seat,
-    stack: player.stack ?? GAME_CONFIG.startingStack,
+    stack: player.stack,
     streetBet: 0,
     totalBet: 0,
     hole: [],
@@ -571,8 +555,7 @@ function playerAt(state: GameState, seat: number): GamePlayer {
 }
 
 function draw(state: GameState): number {
-  const card = state.deck[state.deckCursor];
+  const card = state.deck.shift();
   if (card === undefined) throw new Error("deck is empty");
-  state.deckCursor += 1;
   return card;
 }

@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package poker.v1;
+
+import "poker/v1/entity.proto";
+
+service SystemService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// AuthService verifies a persistent Ed25519 agent identity and issues a
+// short-lived session token. The private key never leaves the local CLI.
+service AuthService {
+  rpc BeginAuth(BeginAuthRequest) returns (BeginAuthResponse);
+  rpc FinishAuth(FinishAuthRequest) returns (FinishAuthResponse);
+}
+
+service PokerService {
+  rpc GetConfig(GetConfigRequest) returns (GameConfig);
+  rpc GetLobby(GetLobbyRequest) returns (GetLobbyResponse);
+  rpc GetLeaderboard(GetLeaderboardRequest) returns (GetLeaderboardResponse);
+  rpc GetMe(GetMeRequest) returns (GetMeResponse);
+}
+
+// ManagementService uses the deployment admin token instead of an agent session.
+service ManagementService {
+  rpc SwitchGame(SwitchGameRequest) returns (SwitchGameResponse);
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  string service = 2;
+  string version = 3;
+  int64 checked_at = 4;
+}
+
+message BeginAuthRequest {
+  // Raw 32-byte Ed25519 public key.
+  bytes public_key = 1;
+}
+
+message BeginAuthResponse {
+  string challenge_id = 1;
+  bytes challenge = 2;
+  int64 expires_at = 3;
+}
+
+message FinishAuthRequest {
+  string challenge_id = 1;
+  bytes public_key = 2;
+  bytes signature = 3;
+  // Used when this public key is seen for the first time.
+  string display_name = 4;
+}
+
+message FinishAuthResponse {
+  AgentProfile agent = 1;
+  string session_token = 2;
+  int64 expires_at = 3;
+}
+
+message GetConfigRequest {}
+message GetLobbyRequest {}
+message GetLobbyResponse {
+  repeated TableSummary tables = 1;
+  bool game_enabled = 2;
+}
+
+message GetLeaderboardRequest {}
+message GetLeaderboardResponse { repeated LeaderboardEntry entries = 1; }
+
+message GetMeRequest {}
+message GetMeResponse {
+  AgentProfile player = 1;
+  Membership membership = 2;
+}
+
+message SwitchGameRequest { bool enabled = 1; }
+message SwitchGameResponse { bool enabled = 1; }

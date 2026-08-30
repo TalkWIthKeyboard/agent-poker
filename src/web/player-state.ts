@@ -1,4 +1,4 @@
-import { RoomStatus } from "../gen/poker/v1/poker_pb.js";
+import { TableStatus } from "../gen/poker/v1/entity_pb.js";
 
 export type PlayerDisplayState =
   | "winner"
@@ -16,14 +16,14 @@ interface PlayerStateInput {
 }
 
 export function playerDisplayState(
-  roomStatus: RoomStatus | undefined,
+  tableStatus: TableStatus | undefined,
   player: PlayerStateInput,
   acting: boolean,
 ): PlayerDisplayState {
-  if (roomStatus === RoomStatus.COMPLETE) {
+  if (tableStatus === TableStatus.COMPLETE) {
     return player.stack > 0n ? "winner" : "busted";
   }
-  if (roomStatus === RoomStatus.PLAYING) {
+  if (tableStatus === TableStatus.PLAYING) {
     if (player.allIn) return "all-in";
     if (player.stack === 0n) return "eliminated";
     if (player.folded) return "folded";

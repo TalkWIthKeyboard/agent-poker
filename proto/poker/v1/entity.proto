@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package poker.v1;
+
+message AgentProfile {
+  // Stable identity derived from SHA-256 of the raw Ed25519 public key.
+  string agent_id = 1;
+  string display_name = 2;
+  int64 created_at = 3;
+  int64 lifetime_score = 4;
+}
+
+message GameConfig {
+  string game = 1;
+  int32 player_count = 2;
+  int64 starting_stack = 3;
+  int64 small_blind = 4;
+  int64 big_blind = 5;
+  int64 action_timeout_ms = 6;
+  int64 showdown_delay_ms = 7;
+  int32 max_queue_size = 8;
+}
+
+message LeaderboardEntry {
+  string agent_id = 1;
+  string display_name = 2;
+  int64 score = 3;
+}
+
+message TableSummary {
+  string table_id = 1;
+  string display_name = 2;
+  TableStatus status = 3;
+  int32 capacity = 4;
+  int32 empty_seats = 5;
+  int32 queue_size = 6;
+  repeated TablePlayer players = 7;
+  bool paused = 8;
+}
+
+message TablePlayer {
+  string agent_id = 1;
+  string display_name = 2;
+  int32 seat = 3;
+}
+
+enum MembershipStatus {
+  MEMBERSHIP_STATUS_UNSPECIFIED = 0;
+  MEMBERSHIP_STATUS_SEATED = 1;
+  MEMBERSHIP_STATUS_QUEUED = 2;
+}
+
+message Membership {
+  string table_id = 1;
+  MembershipStatus status = 2;
+  int32 queue_position = 3;
+}
+
+enum TableStatus {
+  TABLE_STATUS_UNSPECIFIED = 0;
+  TABLE_STATUS_WAITING_FOR_PLAYERS = 1;
+  TABLE_STATUS_PLAYING = 2;
+  TABLE_STATUS_COMPLETE = 3;
+}
+
+enum Street {
+  STREET_UNSPECIFIED = 0;
+  STREET_PREFLOP = 1;
+  STREET_FLOP = 2;
+  STREET_TURN = 3;
+  STREET_RIVER = 4;
+  STREET_SHOWDOWN = 5;
+}
+
+enum ActionType {
+  ACTION_TYPE_UNSPECIFIED = 0;
+  ACTION_TYPE_FOLD = 1;
+  ACTION_TYPE_CHECK = 2;
+  ACTION_TYPE_CALL = 3;
+  ACTION_TYPE_RAISE = 4;
+}
+
+message Card {
+  string rank = 1;
+  string suit = 2;
+}
+
+message PlayerView {
+  string agent_id = 1;
+  string display_name = 2;
+  int32 seat = 3;
+  int64 stack = 4;
+  int64 street_bet = 5;
+  int64 total_bet = 6;
+  bool folded = 7;
+  bool all_in = 8;
+  repeated Card revealed_cards = 9;
+  int64 lifetime_score = 10;
+}
+
+message LegalActions {
+  repeated ActionType actions = 1;
+  int64 call_amount = 2;
+  int64 min_raise_to = 3;
+  int64 max_raise_to = 4;
+}
+
+message TableSnapshot {
+  string table_id = 1;
+  TableStatus status = 2;
+  int32 capacity = 3;
+  int32 hand_number = 4;
+  Street street = 5;
+  int64 pot = 6;
+  int64 current_bet = 7;
+  int32 dealer_seat = 8;
+  int32 acting_seat = 9;
+  string acting_agent_id = 10;
+  string decision_id = 11;
+  int64 decision_deadline = 12;
+  repeated Card community_cards = 13;
+  repeated Card viewer_hole_cards = 14;
+  repeated PlayerView players = 15;
+  LegalActions legal_actions = 16;
+  int64 latest_event_seq = 17;
+  string result = 18;
+  int32 queue_size = 19;
+  bool viewer_seated = 20;
+  // One-based FIFO position. Zero means the viewer is not queued.
+  int32 viewer_queue_position = 21;
+  bool paused = 22;
+}

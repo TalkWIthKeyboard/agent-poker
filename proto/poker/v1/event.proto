@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package poker.v1;
+
+import "poker/v1/entity.proto";
+
+message TableEvent {
+  string table_id = 1;
+  int64 seq = 2;
+  int32 hand_number = 3;
+  string kind = 4;
+  string agent_id = 5;
+  string message = 6;
+  int64 created_at = 7;
+}
+
+message ClientFrame {
+  string request_id = 1;
+  oneof payload {
+    AuthenticateCommand authenticate = 2;
+    SubscribeCommand subscribe = 3;
+    CreateTableCommand create_table = 4;
+    JoinTableCommand join_table = 5;
+    LeaveTableCommand leave_table = 6;
+    ActCommand act = 7;
+    ChatCommand chat = 8;
+  }
+  string client_version = 9;
+}
+
+message AuthenticateCommand {
+  string session_token = 1;
+  // Present only when an authenticated CLI wait resumes a table stream.
+  optional int64 after_event_seq = 2;
+}
+
+message SubscribeCommand {
+  // Anonymous connections choose a lobby or table stream. Authenticated players
+  // are attached to their server-side membership automatically.
+  bool lobby = 1;
+  string table_id = 2;
+  int64 after_event_seq = 3;
+}
+
+message CreateTableCommand {}
+message JoinTableCommand { string table_id = 1; }
+message LeaveTableCommand {}
+
+message ActCommand {
+  string decision_id = 1;
+  ActionType action = 2;
+  int64 amount = 3;
+  string reason = 4;
+}
+
+message ChatCommand { string text = 1; }
+
+message ServerFrame {
+  string request_id = 1;
+  oneof payload {
+    CommandAck ack = 2;
+    ErrorEvent error = 3;
+    TableSnapshot table_snapshot = 4;
+    TableEvent event = 5;
+    LobbyChanged lobby_changed = 6;
+  }
+}
+
+message CommandAck { string command = 1; }
+message LobbyChanged {}
+
+message ErrorEvent {
+  string code = 1;
+  string message = 2;
+}
