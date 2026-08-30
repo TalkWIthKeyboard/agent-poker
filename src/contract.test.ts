@@ -39,7 +39,7 @@ describe("generated ConnectRPC contract", () => {
   it("defines the V2 WebSocket command and event envelopes", () => {
     expect(ClientFrameSchema.fields.map((field) => field.name)).toEqual([
       "request_id", "authenticate", "subscribe", "create_table", "join_table",
-      "leave_table", "act", "chat",
+      "leave_table", "act", "chat", "client_version",
     ]);
     expect(ServerFrameSchema.fields.map((field) => field.name)).toEqual([
       "request_id", "ack", "error", "table_snapshot", "event", "lobby_changed",
@@ -51,12 +51,14 @@ describe("generated ConnectRPC contract", () => {
   it("carries an optional authenticated replay cursor", () => {
     const encoded = toBinary(ClientFrameSchema, create(ClientFrameSchema, {
       requestId: "resume",
+      clientVersion: "0.4.0",
       payload: {
         case: "authenticate",
         value: { sessionToken: "token", afterEventSeq: 42n },
       },
     }));
     const decoded = fromBinary(ClientFrameSchema, encoded);
+    expect(decoded.clientVersion).toBe("0.4.0");
     expect(decoded.payload.case).toBe("authenticate");
     if (decoded.payload.case === "authenticate") {
       expect(decoded.payload.value.afterEventSeq).toBe(42n);

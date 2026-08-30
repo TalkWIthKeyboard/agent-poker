@@ -1,4 +1,5 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import packageJson from "../../package.json";
 import {
   ClientFrameSchema,
   ServerFrameSchema,
@@ -23,6 +24,7 @@ export function subscribe(
       status("live");
       socket.send(toBinary(ClientFrameSchema, create(ClientFrameSchema, {
         requestId: crypto.randomUUID(),
+        clientVersion: packageJson.version,
         payload: { case: "subscribe", value: current() },
       })));
     };

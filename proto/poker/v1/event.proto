@@ -25,6 +25,7 @@ message ClientFrame {
     ActCommand act = 7;
     ChatCommand chat = 8;
   }
+  string client_version = 9;
 }
 
 message AuthenticateCommand {

@@ -292,7 +292,11 @@ class PokerConnection {
     timeout = 30_000,
   ): Promise<void> {
     const requestId = crypto.randomUUID();
-    this.socket.send(toBinary(ClientFrameSchema, create(ClientFrameSchema, { requestId, payload })));
+    this.socket.send(toBinary(ClientFrameSchema, create(ClientFrameSchema, {
+      requestId,
+      clientVersion: packageJson.version,
+      payload,
+    })));
     const frame = await this.next((candidate) => (
       candidate.requestId === requestId
       && (candidate.payload.case === "ack" || candidate.payload.case === "error")

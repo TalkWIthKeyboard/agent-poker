@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { timingSafeEqual } from "node:crypto";
+import packageJson from "../../package.json";
 import { ActionType } from "../gen/poker/v1/entity_pb.js";
 import type { ClientFrame } from "../gen/poker/v1/event_pb.js";
 import { DomainError } from "./domain-error.js";
@@ -134,6 +135,12 @@ export class PokerServer extends DurableObject<Env> {
         throw new DomainError(
           "INVALID_ARGUMENT",
           "request_id must contain 1 to 128 characters",
+        );
+      }
+      if (frame.clientVersion !== packageJson.version) {
+        throw new DomainError(
+          "FAILED_PRECONDITION",
+          `Poker CLI ${packageJson.version} is required. Update and retry: npx --yes https://github.com/TalkWIthKeyboard/agent-poker/releases/download/v${packageJson.version}/agent-poker.tgz`,
         );
       }
       await this.handleFrame(webSocket, frame);
