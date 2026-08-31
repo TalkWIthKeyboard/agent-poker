@@ -3,6 +3,7 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
+import { execFileSync } from "node:child_process";
 import { createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -23,7 +24,7 @@ import {
   type TableEvent,
   type ServerFrame,
 } from "../src/gen/poker/v1/event_pb.js";
-import { AuthService, ManagementService, PokerService } from "../src/gen/poker/v1/http_pb.js";
+import { AuthService, ManagementService, PokerService, SystemService } from "../src/gen/poker/v1/http_pb.js";
 
 interface Options {
   server: string;
@@ -52,6 +53,7 @@ const configFile = join(configDirectory, "config.json");
 const help = `Usage: poker [options] <command>
 
 Commands:
+  update  Update the CLI when the server requires a different version
   config  Show the server's game and table parameters
   tables  List tables and live seats
   create  Create an empty table
@@ -78,16 +80,6 @@ Options:
   -h, --help          Show help
   -V, --version       Show version
 `;
-
-try {
-  await main();
-} catch (cause) {
-  const error = cause instanceof ConnectError
-    ? { error: cause.rawMessage, code: cause.code }
-    : { error: cause instanceof Error ? cause.message : String(cause) };
-  process.stderr.write(`${JSON.stringify(error)}\n`);
-  process.exitCode = 1;
-}
 
 async function main(): Promise<void> {
   const { values, positionals } = parseArgs({
@@ -116,7 +108,7 @@ async function main(): Promise<void> {
   const [command, actionName, ...extra] = positionals;
   if (extra.length > 0) throw new Error(`unexpected argument: ${extra[0]}`);
   if (command !== "act" && actionName) throw new Error(`unexpected argument: ${actionName}`);
-  if (!["config", "tables", "create", "membership", "join", "leave", "status", "score", "history", "wait", "say", "act", "start", "stop"].includes(command)) {
+  if (!["update", "config", "tables", "create", "membership", "join", "leave", "status", "score", "history", "wait", "say", "act", "start", "stop"].includes(command)) {
     throw new Error(`unknown command: ${command}`);
   }
   if (command === "act" && !actionName) throw new Error("missing action");
@@ -136,6 +128,18 @@ async function main(): Promise<void> {
     name: values.name,
     table: values.table,
   };
+  if (command === "update") {
+    const requiredVersion = (await createClient(SystemService, transport(options.server)).health({})).version;
+    if (!/^\d+\.\d+\.\d+$/.test(requiredVersion)) throw new Error("server returned an invalid CLI version");
+    if (requiredVersion === packageJson.version) {
+      return print({ updated: false, version: packageJson.version });
+    }
+    execFileSync("npx", [
+      "--yes",
+      `https://github.com/TalkWIthKeyboard/agent-poker/releases/download/v${requiredVersion}/agent-poker.tgz`,
+    ], { stdio: "inherit" });
+    return print({ updated: true, from: packageJson.version, to: requiredVersion });
+  }
   const poker = createClient(PokerService, transport(options.server));
   if (command === "config") {
     const response = await poker.getConfig({});
@@ -575,4 +579,14 @@ function print(value: unknown): void {
     }
     return item;
   }, 2)}\n`);
+}
+
+try {
+  await main();
+} catch (cause) {
+  const error = cause instanceof ConnectError
+    ? { error: cause.rawMessage, code: cause.code }
+    : { error: cause instanceof Error ? cause.message : String(cause) };
+  process.stderr.write(`${JSON.stringify(error)}\n`);
+  process.exitCode = 1;
 }

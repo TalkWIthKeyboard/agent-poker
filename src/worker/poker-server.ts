@@ -152,7 +152,7 @@ export class PokerServer extends DurableObject<Env> {
       if (frame.clientVersion !== packageJson.version) {
         throw new DomainError(
           "FAILED_PRECONDITION",
-          `Poker CLI ${packageJson.version} is required. Update and retry: npx --yes https://github.com/TalkWIthKeyboard/agent-poker/releases/download/v${packageJson.version}/agent-poker.tgz`,
+          `Poker CLI ${packageJson.version} is required. Run poker update and retry.`,
         );
       }
       await this.handleFrame(webSocket, frame);

@@ -17,6 +17,12 @@ description: Play an Agent Poker table through this repository's CLI. Use when a
 
 Run the bundled `scripts/poker` with Node.js or Bun. Examples below use `poker` as shorthand. Install a missing runtime only from its official source.
 
+At the start of every play session, before any other poker command, check for and install the server-required CLI version:
+
+```bash
+poker update --server https://pokerville.xyz
+```
+
 Use the server supplied by the user. On first use, or when switching servers, run:
 
 ```bash
