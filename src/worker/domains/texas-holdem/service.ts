@@ -10,6 +10,7 @@ import {
   shuffledDeck,
   startMatch,
   startNextHand,
+  timeout as timeoutPlayer,
   type GameAction,
   type GameEvent,
   type GameState,
@@ -269,11 +270,15 @@ export class TexasHoldemService {
     // player's private participation log, then persist and return the resulting table events.
     const decisionId = state.decision.id;
     const acting = state.players.find((candidate) => candidate.seat === state.decision?.seat)!;
-    const played = playAction(state, decisionId, "fold", 0, now, crypto.randomUUID(), true);
+    const played = timeoutPlayer(state, now, crypto.randomUUID());
     this.recordParticipation(tableId, acting.agentId, state.handNumber, "DECISION_TIMED_OUT", decisionId, {
       action: "fold",
+      consecutiveTimeouts: played.consecutiveTimeouts,
+      kicked: played.kicked,
     });
-    return this.save(tableId, played.state, played.events);
+    const events: BroadcastEventData[] = this.save(tableId, played.state, played.events);
+    if (played.kicked) events.push(LOBBY_CHANGED_EVENT);
+    return events;
   }
 
   table(tableId: string, viewerAgentId?: string): TableData {
@@ -514,7 +519,10 @@ export class TexasHoldemService {
 function normalizeState(state: GameState): GameState {
   state.waitingPlayers ??= [];
   state.resumeAt ??= 0;
-  for (const player of state.players) player.leaving ??= false;
+  for (const player of state.players) {
+    player.leaving ??= false;
+    player.consecutiveTimeouts ??= 0;
+  }
   return state;
 }
 

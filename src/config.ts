@@ -5,6 +5,7 @@ export const GAME_CONFIG = {
   smallBlind: 5,
   bigBlind: 10,
   actionTimeoutMs: 2 * 60_000,
+  maxConsecutiveTimeouts: 10,
   showdownDelayMs: 3_000,
   maxQueueSize: 100,
 } as const;

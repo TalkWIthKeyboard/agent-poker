@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { GAME_CONFIG } from "../../../config.js";
-import { act, leaveGame, legalActions, refillTable, startMatch, startNextHand } from "./game.js";
+import { act, leaveGame, legalActions, refillTable, startMatch, startNextHand, timeout } from "./game.js";
 
 vi.mock("../../../config.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../config.js")>();
@@ -126,6 +126,21 @@ describe("poker game", () => {
 
     expect(() => act(next, "decision-1", "call", 0, 1_002, "decision-3"))
       .toThrow("decision is no longer current");
+  });
+
+  it("kicks a player after ten consecutive timeouts and resets the count after acting", () => {
+    let state = startMatch(players, orderedDeck(), 1_000, "decision-1").state;
+    state.players[3].consecutiveTimeouts = 9;
+    const kicked = timeout(state, state.decision!.deadline, "decision-2");
+
+    expect(kicked).toMatchObject({ kicked: true, consecutiveTimeouts: 10 });
+    expect(kicked.state.players[3]).toMatchObject({ folded: true, leaving: true, stack: 0 });
+    expect(kicked.events).toContainEqual(expect.objectContaining({ kind: "PLAYER_KICKED", agentId: "agent-3" }));
+
+    state = startMatch(players, orderedDeck(), 1_000, "decision-3").state;
+    state.players[3].consecutiveTimeouts = 9;
+    const acted = act(state, "decision-3", "call", 0, 1_001, "decision-4");
+    expect(acted.state.players[3].consecutiveTimeouts).toBe(0);
   });
 
   it("starts the next hand when three players fold", () => {

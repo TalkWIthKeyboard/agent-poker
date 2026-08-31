@@ -17,6 +17,7 @@ export interface GamePlayer {
   allIn: boolean;
   acted: boolean;
   leaving: boolean;
+  consecutiveTimeouts: number;
 }
 
 export interface Decision {
@@ -215,6 +216,7 @@ export function act(
 
   const legal = legalActions(state, player.seat);
   if (!legal.actions.includes(action)) throw new Error(`${action} is not legal`);
+  if (!allowExpired) player.consecutiveTimeouts = 0;
 
   if (action === "fold") {
     player.folded = true;
@@ -255,6 +257,28 @@ export function act(
 
   advanceAfterAction(state, player, now, nextDecisionId, events);
   return { state, events };
+}
+
+export function timeout(
+  current: GameState,
+  now: number,
+  nextDecisionId: string,
+): { state: GameState; events: GameEvent[]; kicked: boolean; consecutiveTimeouts: number } {
+  const decision = current.decision;
+  if (!decision || decision.deadline > now) throw new Error("decision has not expired");
+  const player = playerAt(current, decision.seat);
+  const consecutiveTimeouts = player.consecutiveTimeouts + 1;
+  const kicked = consecutiveTimeouts >= GAME_CONFIG.maxConsecutiveTimeouts;
+  const result = kicked
+    ? leaveGame(current, player.agentId, now, nextDecisionId)
+    : act(current, decision.id, "fold", 0, now, nextDecisionId, true);
+  playerAt(result.state, decision.seat).consecutiveTimeouts = consecutiveTimeouts;
+  if (kicked) result.events.push({
+    kind: "PLAYER_KICKED",
+    agentId: player.agentId,
+    message: `${player.displayName} was removed after ${consecutiveTimeouts} consecutive timeouts.`,
+  });
+  return { ...result, kicked, consecutiveTimeouts };
 }
 
 export function leaveGame(
@@ -479,6 +503,7 @@ export function seatPlayer(player: WaitingPlayer, seat: number): GamePlayer {
     allIn: false,
     acted: false,
     leaving: false,
+    consecutiveTimeouts: 0,
   };
 }
 
