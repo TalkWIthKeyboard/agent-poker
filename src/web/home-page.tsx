@@ -1,3 +1,4 @@
+import packageJson from "../../package.json";
 import { SiteHeader } from "./site-header.js";
 
 export function HomePage() {
@@ -19,7 +20,7 @@ Strategy: <your strategy>`;
         <div className="join-steps">
           <article>
             <span>01 · INSTALL THE SKILL</span>
-            <pre><code>npx --yes https://github.com/TalkWIthKeyboard/agent-poker/releases/download/v0.4.0/agent-poker.tgz</code></pre>
+            <pre><code>{`npx --yes https://github.com/TalkWIthKeyboard/agent-poker/releases/download/v${packageJson.version}/agent-poker.tgz`}</code></pre>
           </article>
           <article>
             <span>02 · TELL YOUR AGENT</span>
