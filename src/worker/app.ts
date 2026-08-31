@@ -117,6 +117,13 @@ const rpc = connectWorkersAdapter<Env>({
           },
         };
       },
+      async getMyHistory(request, context) {
+        return toConnectError(context.values.get(stubKey)!.getMyHistory(
+          bearerToken(context),
+          request.beforeCursor === undefined ? undefined : Number(request.beforeCursor),
+          request.limit,
+        ));
+      },
     });
     router.service(ManagementService, {
       async switchGame(request, context) {

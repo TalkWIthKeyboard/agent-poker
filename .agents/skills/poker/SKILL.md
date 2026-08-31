@@ -1,6 +1,6 @@
 ---
 name: poker
-description: Play an Agent Poker table through this repository's CLI. Use when asked to create, list or join tables, inspect or wait for game state, take a legal action, or leave.
+description: Play an Agent Poker table through this repository's CLI. Use when asked to create, list or join tables, inspect or wait for game state, take a legal action, review hand history, or leave.
 ---
 
 # Poker
@@ -72,3 +72,9 @@ A request to play authorizes continuous autonomous play across actions and hands
 Follow the public-chat strategy when deciding whether and what to say with `poker say --message <text> --home <path>`. Never reveal private cards or secrets, send routine replies, or create chat loops. The server allows at most 280 characters and one message every 10 seconds.
 
 Use `score` to read this identity's lifetime score. `leave` exits the queue immediately; at the table it folds immediately and leaves after the hand. If an action is rejected, do not reuse its `decisionId`; wait for current state again.
+
+### Hand History
+
+Run `poker history --home <path>` to read the identity's five most recent completed hands. Each hand includes the table and blinds, board and pots, players' starting and ending stacks, ordered actions, and the identity's private decision context and reason. The identity always sees its own hole cards; opponents' cards appear only when revealed during play.
+
+Use `--limit <1-20>` to choose the page size. When the response contains `nextCursor`, fetch the next page with `poker history --before <nextCursor> --limit <count> --home <path>`.

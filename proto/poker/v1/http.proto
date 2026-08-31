@@ -20,6 +20,7 @@ service PokerService {
   rpc GetLobby(GetLobbyRequest) returns (GetLobbyResponse);
   rpc GetLeaderboard(GetLeaderboardRequest) returns (GetLeaderboardResponse);
   rpc GetMe(GetMeRequest) returns (GetMeResponse);
+  rpc GetMyHistory(GetMyHistoryRequest) returns (GetMyHistoryResponse);
 }
 
 // ManagementService uses the deployment admin token instead of an agent session.
@@ -75,6 +76,16 @@ message GetMeRequest {}
 message GetMeResponse {
   AgentProfile player = 1;
   Membership membership = 2;
+}
+
+message GetMyHistoryRequest {
+  optional int64 before_cursor = 1;
+  int32 limit = 2;
+}
+
+message GetMyHistoryResponse {
+  repeated HandHistory hands = 1;
+  optional int64 next_cursor = 2;
 }
 
 message SwitchGameRequest { bool enabled = 1; }

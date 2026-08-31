@@ -11,6 +11,8 @@ import { parseArgs } from "node:util";
 import packageJson from "../package.json";
 import {
   ActionType,
+  HandActionType,
+  Street,
   type Membership,
   type TableSnapshot,
 } from "../src/gen/poker/v1/entity_pb.js";
@@ -58,6 +60,7 @@ Commands:
   leave  Fold immediately and leave after the hand
   status
   score
+  history [--limit <count>] [--before <cursor>]
   wait [--after <seq>] [--timeout <ms>]
   say --message <text>
   act <fold|check|call|raise> --decision <id> [--to <amount>] [--reason <text>]
@@ -70,6 +73,8 @@ Options:
   --name <name>       Display name for a new identity
   -t, --table <id>    Table ID; required for join
   --message <text>    Table chat message
+  --limit <count>     History page size (1-20, default 5)
+  --before <cursor>   Load history before this cursor
   -h, --help          Show help
   -V, --version       Show version
 `;
@@ -98,6 +103,8 @@ async function main(): Promise<void> {
       to: { type: "string", default: "0" },
       reason: { type: "string", default: "" },
       message: { type: "string" },
+      limit: { type: "string", default: "5" },
+      before: { type: "string" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "V" },
     },
@@ -109,7 +116,7 @@ async function main(): Promise<void> {
   const [command, actionName, ...extra] = positionals;
   if (extra.length > 0) throw new Error(`unexpected argument: ${extra[0]}`);
   if (command !== "act" && actionName) throw new Error(`unexpected argument: ${actionName}`);
-  if (!["config", "tables", "create", "membership", "join", "leave", "status", "score", "wait", "say", "act", "start", "stop"].includes(command)) {
+  if (!["config", "tables", "create", "membership", "join", "leave", "status", "score", "history", "wait", "say", "act", "start", "stop"].includes(command)) {
     throw new Error(`unknown command: ${command}`);
   }
   if (command === "act" && !actionName) throw new Error("missing action");
@@ -155,6 +162,25 @@ async function main(): Promise<void> {
     return print(command === "membership"
       ? { membership: me.membership }
       : { score: me.player?.lifetimeScore ?? 0n });
+  }
+  if (command === "history") {
+    const limit = Number(values.limit);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) {
+      throw new Error("limit must be an integer from 1 to 20");
+    }
+    let beforeCursor: bigint | undefined;
+    if (values.before !== undefined) {
+      try {
+        beforeCursor = BigInt(values.before);
+      } catch {
+        throw new Error("before must be a positive integer");
+      }
+      if (beforeCursor <= 0n) throw new Error("before must be a positive integer");
+    }
+    return print(await withSession(options, (token) => poker.getMyHistory(
+      { limit, beforeCursor },
+      authorization(token),
+    )));
   }
   const waitAfter = command === "wait" ? BigInt(values.after) : undefined;
   const socket = await PokerConnection.open(options.server);
@@ -539,7 +565,10 @@ function print(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, (key, item) => {
     if (typeof item === "bigint") return item.toString();
     if (key === "action" && typeof item === "number") {
-      return item === ActionType.UNSPECIFIED ? undefined : ActionType[item].toLowerCase();
+      return item === HandActionType.UNSPECIFIED ? undefined : HandActionType[item].toLowerCase();
+    }
+    if (key === "street" && typeof item === "number") {
+      return item === Street.UNSPECIFIED ? undefined : Street[item].toLowerCase();
     }
     if (key === "actions" && Array.isArray(item)) {
       return item.map((action) => ActionType[action as ActionType].toLowerCase());

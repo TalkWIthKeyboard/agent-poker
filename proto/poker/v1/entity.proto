@@ -130,3 +130,85 @@ message TableSnapshot {
   int32 viewer_queue_position = 21;
   bool paused = 22;
 }
+
+message Hand {
+  int64 id = 1;
+  string table_id = 2;
+  int32 hand_number = 3;
+  int64 small_blind = 5;
+  int64 big_blind = 6;
+  int32 dealer_seat = 7;
+  int32 small_blind_seat = 8;
+  int32 big_blind_seat = 9;
+  repeated Card board = 10;
+  string result = 11;
+  repeated HandPot pots = 12;
+  int64 started_at = 13;
+  int64 ended_at = 14;
+}
+
+message HandPot {
+  int64 amount = 1;
+  repeated HandPotWinner winners = 2;
+}
+
+message HandPotWinner {
+  string agent_id = 1;
+  int64 amount = 2;
+}
+
+message HandPlayer {
+  int64 hand_id = 1;
+  string agent_id = 2;
+  int32 seat = 3;
+  int64 starting_stack = 4;
+  int64 ending_stack = 5;
+  repeated Card hole_cards = 6;
+  bool revealed = 7;
+  string showdown_rank = 8;
+}
+
+enum HandActionType {
+  HAND_ACTION_TYPE_UNSPECIFIED = 0;
+  HAND_ACTION_TYPE_POST_SMALL_BLIND = 1;
+  HAND_ACTION_TYPE_POST_BIG_BLIND = 2;
+  HAND_ACTION_TYPE_CHECK = 3;
+  HAND_ACTION_TYPE_CALL = 4;
+  HAND_ACTION_TYPE_RAISE = 5;
+  HAND_ACTION_TYPE_FOLD = 6;
+  HAND_ACTION_TYPE_PAYOUT = 7;
+}
+
+message HandDecision {
+  int64 pot_before = 2;
+  int64 stack_before = 3;
+  repeated ActionType legal_actions = 4;
+  int64 call_amount = 5;
+  int64 min_raise_to = 6;
+  int64 max_raise_to = 7;
+  string reason = 8;
+  int64 response_time_ms = 9;
+}
+
+message HandAction {
+  int64 id = 1;
+  int64 hand_id = 2;
+  int32 seq = 3;
+  string agent_id = 4;
+  Street street = 5;
+  HandActionType action = 6;
+  int64 amount = 7;
+  int64 bet_to = 8;
+  int64 pot_after = 9;
+  int64 stack_after = 10;
+  bool automatic = 11;
+  int64 created_at = 12;
+  optional HandDecision decision = 13;
+}
+
+message HandHistory {
+  Hand hand = 1;
+  string hero_agent_id = 2;
+  repeated HandPlayer players = 3;
+  repeated HandAction actions = 4;
+}

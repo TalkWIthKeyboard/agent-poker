@@ -1,6 +1,8 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import {
+  HandDecisionSchema,
+  HandHistorySchema,
   PlayerViewSchema,
   TableSnapshotSchema,
 } from "./gen/poker/v1/entity_pb.js";
@@ -27,9 +29,17 @@ describe("generated ConnectRPC contract", () => {
 
   it("keeps player HTTP queries separate from management", () => {
     expect(Object.keys(PokerService.method)).toEqual([
-      "getConfig", "getLobby", "getLeaderboard", "getMe",
+      "getConfig", "getLobby", "getLeaderboard", "getMe", "getMyHistory",
     ]);
     expect(Object.keys(ManagementService.method)).toEqual(["switchGame"]);
+  });
+
+  it("defines private, paginated hand history", () => {
+    expect(PokerService.method.getMyHistory.methodKind).toBe("unary");
+    expect(HandHistorySchema.fields.map((field) => field.name)).toEqual([
+      "hand", "hero_agent_id", "players", "actions",
+    ]);
+    expect(HandDecisionSchema.fields.map((field) => field.name)).toContain("reason");
   });
 
   it("keeps public player data in table snapshots", () => {

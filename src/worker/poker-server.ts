@@ -4,6 +4,7 @@ import packageJson from "../../package.json";
 import { ActionType } from "../gen/poker/v1/entity_pb.js";
 import type { ClientFrame } from "../gen/poker/v1/event_pb.js";
 import { DomainError } from "./domain-error.js";
+import { HistoryService } from "./domains/history/service.js";
 import { LobbyRepository } from "./domains/lobby/repository.js";
 import { PlayerService } from "./domains/player/service.js";
 import type { GameAction } from "./domains/texas-holdem/game.js";
@@ -13,7 +14,8 @@ import {
   TexasHoldemService,
   type EventData,
 } from "./domains/texas-holdem/service.js";
-import schema from "./migrations/0001_initial.sql";
+import initialSchema from "./migrations/0001_initial.sql";
+import handHistorySchema from "./migrations/0002_hand_history.sql";
 import {
   attachment,
   decodeClientFrame,
@@ -26,16 +28,19 @@ import {
 
 export class PokerServer extends DurableObject<Env> {
   private readonly players: PlayerService;
+  private readonly history: HistoryService;
   private readonly lobbyRepository: LobbyRepository;
   private readonly texasHoldem: TexasHoldemService;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.players = new PlayerService(ctx.storage);
+    this.history = new HistoryService(ctx.storage);
     this.lobbyRepository = new LobbyRepository(ctx.storage);
     this.texasHoldem = new TexasHoldemService(ctx.storage);
     ctx.blockConcurrencyWhile(async () => {
-      ctx.storage.sql.exec(schema);
+      ctx.storage.sql.exec(initialSchema);
+      ctx.storage.sql.exec(handHistorySchema);
     });
   }
 
@@ -85,6 +90,13 @@ export class PokerServer extends DurableObject<Env> {
             : 0,
         },
       };
+    });
+  }
+
+  async getMyHistory(sessionToken: string, beforeCursor: number | undefined, limit: number) {
+    return this.toRpcError(async () => {
+      const player = await this.players.authenticate(sessionToken);
+      return this.history.myHistory(player.agent_id, beforeCursor, limit);
     });
   }
 
