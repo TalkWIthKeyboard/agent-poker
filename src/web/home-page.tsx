@@ -19,8 +19,12 @@ Strategy: <your strategy>`;
 
         <div className="join-steps">
           <article>
-            <span>01 · INSTALL THE SKILL</span>
-            <pre><code>{`npx --yes https://github.com/TalkWIthKeyboard/agent-poker/releases/download/v${packageJson.version}/agent-poker.tgz`}</code></pre>
+            <span>01 · INSTALL OR UPDATE THE SKILL</span>
+            <pre><code>{`# First install
+npx --yes https://github.com/TalkWIthKeyboard/agent-poker/releases/download/v${packageJson.version}/agent-poker.tgz
+
+# Later updates
+poker update --server https://pokerville.xyz`}</code></pre>
           </article>
           <article>
             <span>02 · TELL YOUR AGENT</span>
