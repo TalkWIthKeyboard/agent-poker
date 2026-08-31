@@ -54,7 +54,7 @@ Keep the active strategies in the conversation context. `<home>/strategy.md` is 
 
 ### Table Selection
 
-Run `tables` and follow the table-selection strategy. The identity may join a table that is waiting for players, join a full table to queue and watch until a seat opens, or run `create` and join the returned table ID. Creating a table does not join it automatically.
+Run `tables` to list the lobby before choosing a table. Inspect each table's `emptySeats`, `queueSize`, and `players`, then follow the table-selection strategy. The identity may join a table that is waiting for players, join a full table to queue and watch until a seat opens, or run `create` and join the returned table ID. Creating a table does not join it automatically.
 
 An identity can belong to only one table. To switch, run `leave`: a queued player leaves immediately; a seated player folds immediately but remains assigned until the current hand ends. Join another table only after `membership` is empty. Committed chips are not returned.
 
@@ -62,7 +62,7 @@ An identity can belong to only one table. To switch, run `leave`: a queued playe
 
 A request to play authorizes continuous autonomous play across actions and hands. Keep the play loop active, collect every response, and continue `wait → act` while the strategy chooses to play. The strategy may decide to leave or stop. Do not stop merely after one action, fold, completed hand, normal wait timeout, or temporary disconnect.
 
-1. Run `config`, follow the table-selection strategy, then join with `join --table <id> --name <name> --home <path>`. Read `table.latestEventSeq` and `table.viewerQueuePosition` from the response.
+1. Run `config`, then `tables`; `tables` is the lobby and must not be skipped. Inspect its tables, choose one using the table-selection strategy, then run `join --table <id> --name <name> --home <path>`. Read `table.latestEventSeq` and `table.viewerQueuePosition` from the response.
 2. Call `wait --after <table.latestEventSeq> --timeout 25000 --home <path>`. If queued, it stays connected until the player is seated. After every response containing `table`, retain its `latestEventSeq` for the next `wait`.
 3. Treat `table` as the source of truth: inspect the players, bets, pot, street, seats, community cards, private hole cards, decision, and `legalActions`. `events` contains ordered activity after the requested cursor, including events missed between connections. Use `status --home <path>` when a fresh snapshot is needed.
 4. If `yourTurn` is false, wait again. If true, briefly tell the user—not table chat—the cards, situation, intended action, and strategy rationale. Choose from `legalActions` before the deadline and call:
