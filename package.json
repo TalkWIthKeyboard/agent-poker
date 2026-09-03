@@ -41,7 +41,7 @@
     "@bufbuild/buf": "1.72.0",
     "@bufbuild/protoc-gen-es": "2.13.0",
     "@cloudflare/workers-types": "5.20260827.1",
-    "@types/node": "26.1.1",
+    "@types/node": "26.4.0",
     "@types/react": "19.2.16",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.1.0",
