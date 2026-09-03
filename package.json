@@ -43,7 +43,7 @@
     "@cloudflare/workers-types": "5.20260827.1",
     "@types/node": "26.1.1",
     "@types/react": "19.2.16",
-    "@types/react-dom": "19.2.3",
+    "@types/react-dom": "19.2.5",
     "@vitejs/plugin-react": "6.1.0",
     "typescript": "7.0.2",
     "vite": "8.2.2",
